@@ -263,7 +263,7 @@ uint8_t data[][15] = {
 
 int getMessageOnBroadcast(uint8_t *reply){
     // MCP2515_Receive(0x7DF, reply);
-    MCP2515_ReceiveNoTimeout(0x7DF, reply);
+    MCP2515_Receive(0x7DF, reply);
     if(reply[0] == 0 && reply[1] == 0){
         return -1;
     }
@@ -343,106 +343,82 @@ uint8_t* PID_To_Rawbits(uint8_t pid, int rowNum){
             result[0] = 0x00; // invalid PID
             break;
     }
+    return result;
 }
 
-int positionInArray = 0;
-uint8_t* get_Response_CAN(uint8_t *reply){
-    // {0x02, 0x01, 0x0C, 0x00,0x00, 0x00, 0x00, 0x00};
-    // len, mode, pid, dataA, dataB, ....
-    uint8_t *response = malloc(8 * sizeof(uint8_t));
-    //response[8] = {0x00, 0x41, reply[2], 0x00,0x00, 0x00, 0x00, 0x00};
-    response[1] = 0x41;
-    response[2] = reply[2];
-    // reply is the buffer to storing the received frame
-    switch (reply[2]) { // look for the PIDS
-        case 0x0C: // engine RPM
-            //response = {0x02, 0x41, 0x0C, ,0x00, 0x00, 0x00, 0x00};
-            response[3] = data[positionInArray][0];
-            response[4] = data[positionInArray][1];
-            response[0] = 0x04;
-            break;
-        case 0x0D: // vehicle speed
-            response[3] = data[positionInArray][2];
-            response[0] = 0x03;
-            break;
-        case 0x11: // throttle position
-            response[3] = data[positionInArray][3];
-            response[0] = 0x03;
-            break;
-        case 0x05: // coolant temperature
-            response[3] = data[positionInArray][4];
-            response[0] = 0x03;
-            break;
-        case 0x42: // control module voltage
-            response[3] = data[positionInArray][5];
-            response[4] = data[positionInArray][6];
-            response[0] = 0x04;
-            break;
-        case 0x04: // calculated engine load
-            response[3] = data[positionInArray][7];
-            response[0] = 0x03;
-            break;
-        case 0x23: // fuel rail pressure
-            response[3] = data[positionInArray][8];
-            response[4] = data[positionInArray][9];
-            response[0] = 0x04;
-            break;
-        case 0x10: // mass air flow
-            response[3] = data[positionInArray][10];
-            response[4] = data[positionInArray][11];
-            response[0] = 0x04;
-            break;
-        case 0x1F: // run time since engine start
-            response[3] = data[positionInArray][12];
-            response[4] = data[positionInArray][13];
-            response[0] = 0x04;
-            break;
-        case 0x0F: // intake air temperature
-            response[3] = data[positionInArray][14];
-            response[0] = 0x03;
-            positionInArray++;
-            if(positionInArray >= sizeof(data)/sizeof(data[0])){
-                positionInArray = 0;
-            }
-            break;
-        default:
-            break;
+// decode request and build response frame (only works for mode 1, single frame responses)
+uint8_t* Decode_Request(uint8_t *request, int rowNum){
+    uint8_t* response = calloc(8, sizeof(uint8_t)); // prepare 8 byte response
+    if(request[1] != 0x01){
+        return NULL; // not a mode 1 request
     }
+    uint8_t dataLen = request[0] - 0x01; // will give us the number of PIDs requested
+    if(dataLen == 0x00){ // no PIDs given 
+        return NULL; 
+    }
+
+    uint8_t calculatedLen = 0x01; // 1 for the 0x41 mode 
+    response[1] = 0x41; // mode 1 response
+    for(uint8_t i = 0; i < dataLen; i++){
+        uint8_t pid = request[2 + i];
+        printf("Requested PID: %02X\n", pid);
+        uint8_t* rawbits = PID_To_Rawbits(pid, rowNum);
+        if(rawbits[0] == 0x00){
+            // invalid PID
+            free(rawbits);
+            continue;
+        }
+        
+        //response // store the PID
+        response[calculatedLen + 1] = rawbits[0]; // PID
+        calculatedLen++;
+        if(rawbits[2] == 0x00){ // single data byte
+            response[calculatedLen + 1] = rawbits[1]; // dataA
+            calculatedLen++;
+        } else { // two data bytes
+            response[calculatedLen + 1] = rawbits[1]; // dataA
+            calculatedLen++;
+            response[calculatedLen + 1] = rawbits[2]; // dataB
+            calculatedLen++;
+        }
+        free(rawbits);
+    }
+    response[0] = calculatedLen;
     return response;
 }
 
-int query_CAN(uint8_t num){
-    // uint8_t frame[8] = {0x03, 0x01, num, 0x05,0x00, 0x00, 0x00, 0x00};// frame to send, 2 bytes, mode 1 and the PID
-    // uint32_t canID = 0x7DF; // broadcast ID
-    uint8_t reply[8] = {0};
-    // MCP2515_Send(canID, frame, 8); // send the frame
-    MCP2515_Receive(0x7DF, reply);
-    if(reply[0] == 0 && reply[1] == 0){
-        return -1;
-    }
-    uint8_t* response = get_Response_CAN(reply);
-    send_CAN(response);
-    free(response);
-    // printf("Received: ");
-    // for(int i = 0; i < 8; i++){
-    //     printf("%02X ", reply[i]);
-    // }
-    // printf("\n");
-}
+// int query_CAN(uint8_t num){
+//     // uint8_t frame[8] = {0x03, 0x01, num, 0x05,0x00, 0x00, 0x00, 0x00};// frame to send, 2 bytes, mode 1 and the PID
+//     // uint32_t canID = 0x7DF; // broadcast ID
+//     uint8_t reply[8] = {0};
+//     // MCP2515_Send(canID, frame, 8); // send the frame
+//     MCP2515_Receive(0x7DF, reply);
+//     if(reply[0] == 0 && reply[1] == 0){
+//         return -1;
+//     }
+//     uint8_t* response = get_Response_CAN(reply);
+//     send_CAN(response);
+//     free(response);
+//     // printf("Received: ");
+//     // for(int i = 0; i < 8; i++){
+//     //     printf("%02X ", reply[i]);
+//     // }
+//     // printf("\n");
+// }
 
 // int speedArrLen = 938;
 // uint8_t data_arr[];
 
 
 
-int main(void) {
+int main(void){
     stdio_init_all();
     while(!stdio_usb_connected());
     printf("CAN OBD-II Reader Initialized\n");
     CAN_DEV_Module_Init();
     MCP2515_Init();
-    uint8_t i = 0;
-    //absolute_time_t start = get_absolute_time();
+    int i = 0;
+    absolute_time_t start = get_absolute_time();
     while(1){
         // printf("Waiting for reply...\n");
         uint8_t reply[8] = {0};
@@ -452,24 +428,27 @@ int main(void) {
         //     printf("%02X ", reply[j]);
         // }
         // printf("\n");
-        uint8_t* response = get_Response_CAN(reply);
+        uint8_t* response = Decode_Request(reply, i);
+        if(response == NULL){
+            free(response);
+            continue; // invalid request
+        }
+        printf("Sending: ");
+        for(int j = 0; j < 8; j++){
+            printf("%02X ", response[j]);
+        }
+        printf("\n");
         send_CAN(response);
         free(response);
-       // query_CAN(reply[2]);
-        // uint8_t response [8] = {0x04, 0x41, 0x02, reply[2], reply[2], 0x00, 0x00, 0x00};
-        // send_CAN(response);
-        // if(is_valid_speed(reply)){
-        //     absolute_time_t now = get_absolute_time();
-        //     int elapsed_ms = absolute_time_diff_us(start, now) / 1000;
-        //     int index = ((elapsed_ms / 500) +250) % speedArrLen; // array index based on 500 ms intervals
-        //     //uint8_t speed = vehSpeedArr[index];
-        //     uint8_t speedFrame[8] = {0x04, 0x41, 0x0D, speed, 0x00, 0x00, 0x00, 0x00};
-        //     send_CAN(speedFrame);
-        //     printf("Sent speed: %d km/h at index %d\n", speed, index);
-        // }
-        //query_CAN(i);
-        // printf("Sent PID: %d\n", i);
-        //i++;
-        // sleep_ms(1000);
+        
+
+        if(absolute_time_diff_us(start, get_absolute_time()) > 50000){ // 50ms per data set
+            start = get_absolute_time();
+            i++;
+            if(i >= sizeof(data)/sizeof(data[0])){
+                i = 0;
+            }
+
+        }
     }
 }
