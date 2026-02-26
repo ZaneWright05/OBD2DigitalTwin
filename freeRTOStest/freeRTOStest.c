@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
 #include "CAN/CAN_DEV_Config.h"
 #include "CAN/MCP2515.h"
 
@@ -25,6 +27,17 @@ StackType_t COOLNT_FUEL_PRESS_stack[256];
 
 StaticTask_t RUNTIME_SINCE_ENG_START_task_p;
 StackType_t RUNTIME_SINCE_ENG_START_stack[256];
+
+static StaticQueue_t xStaticQueue;
+QueueHandle_t dataQueue;
+
+typedef struct{
+    uint8_t pid;
+    uint32_t seqNum;
+    uint8_t data[2];
+} QueueEntry;
+
+uint8_t ucQueueStorageArea[ 256 * sizeof(QueueEntry) ];
 
 StaticTask_t xIdleTaskTCB;
 StackType_t  xIdleStack[configMINIMAL_STACK_SIZE];
@@ -53,7 +66,7 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
 // struct to hold data size for iteration and the returned value, may need to convert data types later
 typedef struct{
     int dataSize;
-    float dataValue;
+    uint8_t dataValue[2];
 } PIDValue;
 
 
@@ -62,72 +75,85 @@ simple, should be replaced with look up tables and along with better error/decod
 also the data types should be fixed
 */
 PIDValue extract_Data_By_PID(uint8_t pid, uint8_t * replyFrame, int pos){
-    PIDValue pidValue = {0, 0.0f};
-    float value = 0.0f;
-    int dataSize = 0;
+    PIDValue pidValue = {0, {0, 0}};
+    //float value = 0.0f;
+    //int dataSize = 0;
     switch (pid)
     {
     case 0x0C:
         //printf("PID 0x%02X: Data %02X %02X (RPM)\n", pid, replyFrame[pos], replyFrame[pos + 1]);
-        dataSize = 2;
-        value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 4; // each bit is 1/4 rpm
+        //dataSize = 2;
+        //value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 4; // each bit is 1/4 rpm
+        pidValue.dataSize = 2;
+        pidValue.dataValue[0] = replyFrame[pos];
+        pidValue.dataValue[1] = replyFrame[pos + 1];
         break;
     case 0x42:
         //printf("PID 0x%02X: Data %02X %02X (Voltage)\n", pid, replyFrame[pos], replyFrame[pos + 1]);
-        dataSize = 2;
-        value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 1000.0f; // each bit is 0.001 volts
+        pidValue.dataSize = 2;
+        pidValue.dataValue[0] = replyFrame[pos];
+        pidValue.dataValue[1] = replyFrame[pos + 1];
+        //value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 1000.0f; // each bit is 0.001 volts
         break;
     case 0x23:
         //printf("PID 0x%02X: Data %02X %02X (Fuel Rail Pressure)\n", pid, replyFrame[pos], replyFrame[pos + 1]);
-        dataSize = 2;
-        value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) * 10; // each bit is 10 kPa
+        pidValue.dataSize = 2;
+        pidValue.dataValue[0] = replyFrame[pos];
+        pidValue.dataValue[1] = replyFrame[pos + 1];
+        //value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) * 10; // each bit is 10 kPa
         break;
     case 0x10:
         //printf("PID 0x%02X: Data %02X %02X (MAF)\n", pid, replyFrame[pos], replyFrame[pos + 1]);
-        dataSize = 2;
-        value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 100.0f; // each bit is 0.01 g/s
+        pidValue.dataSize = 2;
+        pidValue.dataValue[0] = replyFrame[pos];
+        pidValue.dataValue[1] = replyFrame[pos + 1];
+        //value = ((replyFrame[pos] << 8) + replyFrame[pos + 1]) / 100.0f; // each bit is 0.01 g/s
         break;
     case 0x1F:
         //printf("PID 0x%02X: Data %02X %02X (Run time since engine start)\n", pid, replyFrame[pos], replyFrame[pos + 1]);
-        dataSize = 2;
-        value = (replyFrame[pos] << 8) + replyFrame[pos + 1]; // each bit is 1 second
+        pidValue.dataSize = 2;
+        pidValue.dataValue[0] = replyFrame[pos];
+        pidValue.dataValue[1] = replyFrame[pos + 1];
+        //value = (replyFrame[pos] << 8) + replyFrame[pos + 1]; // each bit is 1 second
         break;
     case 0x0D:
         //printf("PID 0x%02X: Data 0x%02X (Vehicle Speed)\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos]; // 1km/h = 1 bit  
+        pidValue.dataSize = 1;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos]; // 1km/h = 1 bit  
         break;
     case 0x11:
         //printf("PID 0x%02X: Data 0x%02X (Throttle Position)\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos] * 100 / 256; // % value
+        pidValue.dataSize = 1;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos] * 100 / 256; // % value
         break;
      case 0x0F:
         //printf("PID 0x%02X: Data 0x%02X (Intake Air Temperature)\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos] - 40; // temp val offset by 40 celcius
+        pidValue.dataSize = 1;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos] - 40; // temp val offset by 40 celcius
         break;
     case 0x05:
         //printf("PID 0x%02X: Data 0x%02X (Engine Coolant Temperature)\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos] - 40; // temp val offset by 40 celcius
+        pidValue.dataSize = 1;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos] - 40; // temp val offset by 40 celcius
         break;
     case 0x04:
         //printf("PID 0x%02X: Data 0x%02X (Calculated Engine Load)\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos] * 100 / 256; // % value
+        pidValue.dataSize = 1;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos] * 100 / 256; // % value
         break;
     // this is a catch all assuming one data byte
     default:
-        printf("PID 0x%02X: Data 0x%02X\n", pid, replyFrame[pos]);
-        dataSize = 1;
-        value = replyFrame[pos];
+        printf("PID 0x%02X: Data 0x%02X\n", pid, replyFrame[pos]);  
+        pidValue.dataSize = 100;
+        pidValue.dataValue[0] = replyFrame[pos];
+        //value = replyFrame[pos];
         break;
     }
-
-    pidValue.dataSize = dataSize;
-    pidValue.dataValue = value;
-   // printf("Returning data size: %d\n", dataSize);
     return pidValue;
 }
 
@@ -144,9 +170,29 @@ void CAN_transmission(uint8_t* request_frame, uint8_t* response_frame){
     xTaskResumeAll(); // exit the critical region
 }
 
-void decode_Reply_Frame(uint8_t * replyFrame){
+void add_To_Queue(uint8_t pid, PIDValue pidValue, uint32_t seqNum){
+    QueueEntry entry;
+    entry.pid = pid;
+    entry.seqNum = seqNum;
+    entry.data[0] = pidValue.dataValue[0];
+    entry.data[1] = pidValue.dataValue[1];
+    xQueueSendToBack(dataQueue, &entry, portMAX_DELAY); // block if queue is full
+}
+
+void pop_From_Queue(){
+    while(1){
+        printf("Waiting to pop from queue...\n");
+        QueueEntry entry = {0};
+        xQueueReceive(dataQueue, &entry, 0);
+        printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
+        printf("Number of items in queue: %u\n", uxQueueMessagesWaiting(dataQueue));
+        sleep_ms(25);
+    }
+}
+
+void decode_Reply_Frame(uint8_t * replyFrame, uint32_t sequenceNum){
     uint8_t length = replyFrame[0];
-    if(length < 0x00 || length > 0x07){ // frame length check
+    if(length <= 0x00 || length > 0x07){ // frame length check
         return;
     }
     if(replyFrame[1] != 0x41){ // support responses to mode 1
@@ -157,9 +203,16 @@ void decode_Reply_Frame(uint8_t * replyFrame){
     while(i < length - 1){ // loop and collect related data for each PID
         uint8_t pid = replyFrame[offset + i];
         PIDValue pidVal = extract_Data_By_PID(pid, replyFrame, offset + i + 1); // offset + i + 1 first byte after PID 
+        //add_To_Queue(pid, pidVal, sequenceNum);
+        if(pidVal.dataSize == 100){ // catch all for unsupported PIDs, just print the value
+           printf("Invalid PID, printing whole frame: ");
+            for(int j = 0; j < 8; j++){
+                printf("0x%02X ", replyFrame[j]);
+            }
+            printf("\n");
+        }
         i += pidVal.dataSize + 1;
-
-        printf("Data Value for %02X is %f\n", pid, pidVal.dataValue);
+        //printf("Data Value for %02X is %f\n", pid, pidVal.dataValue);
     }
 }
 
@@ -167,6 +220,8 @@ void rpm_veh_task(void *params)
 {
     const TickType_t period_ticks = pdMS_TO_TICKS(RPM_VEH_SPEED_PERIOD_MS);
     const uint task_PIN = 0;
+
+    uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
     uint8_t rpmSpeedFrame[8] = {0x03, 0x01, 0x0C, 0x0D,0x00, 0x00, 0x00, 0x00};
@@ -176,7 +231,8 @@ void rpm_veh_task(void *params)
         gpio_put(task_PIN, 1);
         uint8_t rpmSpeedReply[8] = {0};
         CAN_transmission(rpmSpeedFrame, rpmSpeedReply);
-        decode_Reply_Frame(rpmSpeedReply);
+        decode_Reply_Frame(rpmSpeedReply, seqNum);
+        seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks); // wait until next release
     }
@@ -186,6 +242,8 @@ void thrttl_intk_task(void *params)
 {
     const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_INTK_PERIOD_MS); // task period 5s
     const uint task_PIN = 1;
+
+    uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
     uint8_t thrtlIntkLdFrame[8] = {0x04, 0x01, 0x11, 0x0F, 0x04, 0x00, 0x00, 0x00};// throttle, intake temp, engine load
@@ -195,7 +253,8 @@ void thrttl_intk_task(void *params)
         gpio_put(task_PIN, 1);
         uint8_t thrtlIntkLdReply[8] = {0};
         CAN_transmission(thrtlIntkLdFrame, thrtlIntkLdReply);
-        decode_Reply_Frame(thrtlIntkLdReply);
+        decode_Reply_Frame(thrtlIntkLdReply, seqNum);
+        seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks);
     }
@@ -204,6 +263,7 @@ void thrttl_intk_task(void *params)
 void maf_ctrl_volt_task(void* params){
     const TickType_t period_ticks = pdMS_TO_TICKS(MAF_CTRL_VOLT_PERIOD_MS); // task period 5s
     const uint task_PIN = 2;
+    uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
     uint8_t MAFVoltFrame[8] = {0x03, 0x01, 0x10, 0x42,0x00, 0x00, 0x00, 0x00};
@@ -212,7 +272,8 @@ void maf_ctrl_volt_task(void* params){
         gpio_put(task_PIN, 1);
         uint8_t MAFVoltReply[8] = {0};
         CAN_transmission(MAFVoltFrame, MAFVoltReply);
-        decode_Reply_Frame(MAFVoltReply);
+        decode_Reply_Frame(MAFVoltReply, seqNum);
+        seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks);
     }
@@ -221,6 +282,8 @@ void maf_ctrl_volt_task(void* params){
 void cllnt_fuel_press_task(void* params){
     const TickType_t period_ticks = pdMS_TO_TICKS(COOLNT_FUEL_PRESS_PERIOD_MS); // task period 5s
     const uint task_PIN = 4;
+
+    uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
     uint8_t cllntFuelRlFrame[8] = {0x03, 0x01, 0x05, 0x23,0x00, 0x00, 0x00, 0x00};
@@ -229,7 +292,8 @@ void cllnt_fuel_press_task(void* params){
         gpio_put(task_PIN, 1);
         uint8_t cllntFuelRlReply[8] = {0};
         CAN_transmission(cllntFuelRlFrame, cllntFuelRlReply);
-        decode_Reply_Frame(cllntFuelRlReply);
+        decode_Reply_Frame(cllntFuelRlReply, seqNum);
+        seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks);
     }
@@ -238,6 +302,8 @@ void cllnt_fuel_press_task(void* params){
 void rt_since_strt_task(void* params){
     const TickType_t period_ticks = pdMS_TO_TICKS(RUNTIME_SINCE_ENG_START_PERIOD_MS); // task period 5s
     const uint task_PIN = 6;
+
+    uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
     uint8_t rtStrtFrame [8] = {0x02, 0x01, 0x1F, 0x00,0x00, 0x00, 0x00, 0x00};// run time since engine start
@@ -246,7 +312,8 @@ void rt_since_strt_task(void* params){
         gpio_put(task_PIN, 1);
         uint8_t rtStrtReply [8] = {0};
         CAN_transmission(rtStrtFrame, rtStrtReply);
-        decode_Reply_Frame(rtStrtReply);
+        decode_Reply_Frame(rtStrtReply, seqNum);
+        seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks);
     }
@@ -258,6 +325,8 @@ int main()
     while(!stdio_usb_connected());
     CAN_DEV_Module_Init();
     MCP2515_Init();
+
+    dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
 
     xTaskCreateStatic(rpm_veh_task,
                 "RPM & Vehicle Speed Task",
@@ -298,6 +367,8 @@ int main()
                 1,
                 RUNTIME_SINCE_ENG_START_stack,
             &RUNTIME_SINCE_ENG_START_task_p);
+    
+   // multicore_launch_core1(pop_From_Queue); // start the queue pop task on the second core
     
     vTaskStartScheduler();
 
