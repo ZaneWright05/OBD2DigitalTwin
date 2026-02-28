@@ -7,6 +7,8 @@
 #include "queue.h"
 #include "CAN/CAN_DEV_Config.h"
 #include "CAN/MCP2515.h"
+//#include "tusb.h"
+//#include "class/cdc/cdc_device.h"
 
 #define RPM_VEH_SPEED_PERIOD_MS 333
 #define THRTL_INTK_PERIOD_MS 500
@@ -33,7 +35,7 @@ StackType_t RUNTIME_SINCE_ENG_START_stack[256];
 // QueueHandle_t dataQueue;
 
 
-typedef struct{
+typedef struct __attribute__((packed)) { // esure struct is exactly 7 bytes
     uint8_t pid;
     uint32_t seqNum;
     uint8_t data[2];
@@ -184,12 +186,34 @@ void add_To_Queue(uint8_t pid, PIDValue pidValue, uint32_t seqNum){
 }
 
 void pop_From_Queue(){
-    int cntr = 0;
+   // int cntr = 0;
     QueueEntry entry = {0};
     while(1){
-        printf("Waiting to pop from queue...\n");
+        // tud_task();
+        // if(tud_cdc_connected()){
+            if(queue_get_level(&dataQueue) > 0){
+                queue_remove_blocking(&dataQueue, &entry);
+                printf("0x%02X,0x%02X,0x%02X,%u\n", entry.pid, entry.data[0], entry.data[1], entry.seqNum);
+               // printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
+                //printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
+                //  uint8_t frame[8];
+        // frame[0] = 0xAA;           // start byte
+        // frame[1] = entry.pid;
+        // frame[2] = entry.data[0];
+        // frame[3] = entry.data[1];
+
+        // // Serialize uint32_t seqNum (little-endian)
+        // frame[4] = (entry.seqNum >> 0) & 0xFF;
+        // frame[5] = (entry.seqNum >> 8) & 0xFF;
+        // frame[6] = (entry.seqNum >> 16) & 0xFF;
+        // frame[7] = (entry.seqNum >> 24) & 0xFF;
+        //tud_cdc_write(frame, sizeof(frame));
+        //tud_cdc_write_flush();
+            // }
+        }
+       // printf("Waiting to pop from queue...\n");
         //BaseType_t res = xQueueReceive(dataQueue, &entry, 0);
-        printf("Pop attempt %d\n", cntr++);
+       // printf("Pop attempt %d\n", cntr++);
         // //if(res == pdPASS){
         //     printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
         //     printf("Number of items in queue: %u\n", uxQueueMessagesWaiting(dataQueue));
@@ -198,9 +222,9 @@ void pop_From_Queue(){
         //     sleep_ms(100);
         //     continue;
         // }
-        queue_remove_blocking(&dataQueue, &entry);
-        printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
-        printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
+       // queue_remove_blocking(&dataQueue, &entry);
+       // printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
+        //printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
         sleep_ms(25);
     }
 }
@@ -227,14 +251,14 @@ void decode_Reply_Frame(uint8_t * replyFrame, uint32_t sequenceNum){
             printf("\n");
         }
         i += pidVal.dataSize + 1;
-        //printf("Data Value for %02X is %f\n", pid, pidVal.dataValue);
+        // printf("Data Value for %02X is %f\n", pid, pidVal.dataValue[0]);
     }
 }
 
 void rpm_veh_task(void *params)
 {
     const TickType_t period_ticks = pdMS_TO_TICKS(RPM_VEH_SPEED_PERIOD_MS);
-    const uint task_PIN = 0;
+    const uint task_PIN = 14;
 
     uint32_t seqNum = 0;
     gpio_init(task_PIN);
@@ -256,7 +280,7 @@ void rpm_veh_task(void *params)
 void thrttl_intk_task(void *params)
 {
     const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_INTK_PERIOD_MS); // task period 5s
-    const uint task_PIN = 1;
+    const uint task_PIN = 15;
 
     uint32_t seqNum = 0;
     gpio_init(task_PIN);
@@ -341,6 +365,7 @@ int main()
     CAN_DEV_Module_Init();
     MCP2515_Init();
 
+    // tusb_init();
     //dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
     queue_init(&dataQueue, sizeof(QueueEntry), 64);
 

@@ -61,11 +61,19 @@ pico_set_program_version(freeRTOStest "0.1")
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(freeRTOStest 0)
 pico_enable_stdio_usb(freeRTOStest 1)
+# pico_enable_stdio_uart(freeRTOStest 0)
+# pico_enable_stdio_semihosting(freeRTOStest 1)
 
 # Add the standard library to the build
 target_link_libraries(freeRTOStest
         pico_stdlib
+
+ #      tinyusb_device
+       # tinyusb_board
+
         hardware_spi)
+
+#target_compile_definitions(freeRTOStest PRIVATE PICO_TINYUSB_CDC=1)
 
 # Add the standard include files to the build
 target_include_directories(freeRTOStest PRIVATE
@@ -84,7 +92,7 @@ target_link_libraries(freeRTOStest
         hardware_sync
         pico_multicore
         pico_util
-        
+
         pico_cyw43_arch_none
         #pico_cyw43_arch_lwip_threadsafe_background
         )
