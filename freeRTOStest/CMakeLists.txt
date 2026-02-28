@@ -83,7 +83,8 @@ target_link_libraries(freeRTOStest
         hardware_irq
         hardware_sync
         pico_multicore
-
+        pico_util
+        
         pico_cyw43_arch_none
         #pico_cyw43_arch_lwip_threadsafe_background
         )

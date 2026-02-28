@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/util/queue.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -28,8 +29,9 @@ StackType_t COOLNT_FUEL_PRESS_stack[256];
 StaticTask_t RUNTIME_SINCE_ENG_START_task_p;
 StackType_t RUNTIME_SINCE_ENG_START_stack[256];
 
-static StaticQueue_t xStaticQueue;
-QueueHandle_t dataQueue;
+// static StaticQueue_t xStaticQueue;
+// QueueHandle_t dataQueue;
+
 
 typedef struct{
     uint8_t pid;
@@ -37,7 +39,9 @@ typedef struct{
     uint8_t data[2];
 } QueueEntry;
 
-uint8_t ucQueueStorageArea[ 256 * sizeof(QueueEntry) ];
+queue_t dataQueue;
+
+// uint8_t ucQueueStorageArea[ 256 * sizeof(QueueEntry) ];
 
 StaticTask_t xIdleTaskTCB;
 StackType_t  xIdleStack[configMINIMAL_STACK_SIZE];
@@ -176,16 +180,27 @@ void add_To_Queue(uint8_t pid, PIDValue pidValue, uint32_t seqNum){
     entry.seqNum = seqNum;
     entry.data[0] = pidValue.dataValue[0];
     entry.data[1] = pidValue.dataValue[1];
-    xQueueSendToBack(dataQueue, &entry, portMAX_DELAY); // block if queue is full
+    queue_add_blocking(&dataQueue, &entry); 
 }
 
 void pop_From_Queue(){
+    int cntr = 0;
+    QueueEntry entry = {0};
     while(1){
         printf("Waiting to pop from queue...\n");
-        QueueEntry entry = {0};
-        xQueueReceive(dataQueue, &entry, 0);
+        //BaseType_t res = xQueueReceive(dataQueue, &entry, 0);
+        printf("Pop attempt %d\n", cntr++);
+        // //if(res == pdPASS){
+        //     printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
+        //     printf("Number of items in queue: %u\n", uxQueueMessagesWaiting(dataQueue));
+        // }else{
+        //     printf("Queue is empty, nothing to pop\n");
+        //     sleep_ms(100);
+        //     continue;
+        // }
+        queue_remove_blocking(&dataQueue, &entry);
         printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
-        printf("Number of items in queue: %u\n", uxQueueMessagesWaiting(dataQueue));
+        printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
         sleep_ms(25);
     }
 }
@@ -203,7 +218,7 @@ void decode_Reply_Frame(uint8_t * replyFrame, uint32_t sequenceNum){
     while(i < length - 1){ // loop and collect related data for each PID
         uint8_t pid = replyFrame[offset + i];
         PIDValue pidVal = extract_Data_By_PID(pid, replyFrame, offset + i + 1); // offset + i + 1 first byte after PID 
-        //add_To_Queue(pid, pidVal, sequenceNum);
+        add_To_Queue(pid, pidVal, sequenceNum);
         if(pidVal.dataSize == 100){ // catch all for unsupported PIDs, just print the value
            printf("Invalid PID, printing whole frame: ");
             for(int j = 0; j < 8; j++){
@@ -326,7 +341,8 @@ int main()
     CAN_DEV_Module_Init();
     MCP2515_Init();
 
-    dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
+    //dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
+    queue_init(&dataQueue, sizeof(QueueEntry), 64);
 
     xTaskCreateStatic(rpm_veh_task,
                 "RPM & Vehicle Speed Task",
@@ -368,7 +384,7 @@ int main()
                 RUNTIME_SINCE_ENG_START_stack,
             &RUNTIME_SINCE_ENG_START_task_p);
     
-   // multicore_launch_core1(pop_From_Queue); // start the queue pop task on the second core
+    multicore_launch_core1(pop_From_Queue); // start the queue pop task on the second core
     
     vTaskStartScheduler();
 
