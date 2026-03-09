@@ -1,2 +1,7 @@
 build
 !.vscode/*
+note.txt
+*.txt
+*.csv
+!data_log2.csv
+*.db

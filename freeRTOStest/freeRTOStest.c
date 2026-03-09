@@ -367,7 +367,7 @@ int main()
 
     // tusb_init();
     //dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
-    queue_init(&dataQueue, sizeof(QueueEntry), 64);
+    queue_init(&dataQueue, sizeof(QueueEntry),256);
 
     xTaskCreateStatic(rpm_veh_task,
                 "RPM & Vehicle Speed Task",
