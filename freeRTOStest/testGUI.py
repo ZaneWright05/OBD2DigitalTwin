@@ -7,7 +7,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
-from dataParser import Analyser, read_csv 
+from dataParser import Analyser, read_csv, read_from_com
 
 class TestScreen(BoxLayout):
     def __init__(self, analyser, **var_args):
@@ -68,8 +68,8 @@ class MyApp(App):
     def build(self):
         self.analyser = Analyser()
 
-        self.worker = Thread(target=read_csv, 
-                             args=('data_log2.csv', self.analyser, 16), 
+        self.worker = Thread(target=read_from_com, 
+                             args=(self.analyser,), 
                              daemon = True)
 
         self.worker.start()

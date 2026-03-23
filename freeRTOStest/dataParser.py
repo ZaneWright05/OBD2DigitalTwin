@@ -3,13 +3,13 @@
 import csv
 import threading
 from collections import defaultdict, deque
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from dataclasses import dataclass
 #from scipy.signal import savgol_filter
 import numpy as np
-from time import sleep
-
+from time import sleep 
+import serial
 
 @dataclass(frozen=True)
 class pid:
@@ -137,10 +137,41 @@ class Analyser:
                 "fuelCons": self.fuelCons
             }
 
+def read_from_com(store):
+    notConnected = True
+    print("Attempting to connect to serial port...")
+    while notConnected:
+        try:
+            ser = serial.Serial('COM4', 115200)
+            print("Connected to serial port.")
+            notConnected = False
+        except serial.SerialException:
+            sleep(1)
+    ser.flushInput()
+    while True:
+        line = ser.readline()
+        if line:
+            line = line.decode("utf-8").strip()
+            parts = line.split(',')
+            if (len(parts) == 4):
+                pid = parts[0]
+                try: 
+                    data0 = int(parts[1], 16)
+                    data1 = int(parts[2], 16) 
+                    seq = int(parts[3].strip(),10)
+                    print(f"PID: {pid}, Data: {data0:02X} {data1:02X}, Seq: {seq}")
+                    with open ("data_log3.csv", "a") as f:
+                        f.write(f"{pid},{data0:02X},{data1:02X},{seq}\n")
+                    store.process_packet(pid, data0, data1, seq)
+                except ValueError:
+                    print(f"Invalid data format")
+        else:
+            print("No data received")
+
 def read_csv(path, store, sample_rate=16):
     delay = 1.0 / sample_rate
 
-    with open('data_log.csv', 'r') as csvfile:
+    with open('data_log2.csv', 'r') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             pid = row['PID']
@@ -149,11 +180,6 @@ def read_csv(path, store, sample_rate=16):
             seq = int(row['Seq'])
             store.process_packet(pid, data0, data1, seq)
             sleep(delay)
-
-
-
-
-
 
 
 
