@@ -4,6 +4,7 @@ import csv
 import threading
 from collections import defaultdict, deque
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 from dataclasses import dataclass
 #from scipy.signal import savgol_filter
 import numpy as np
@@ -37,6 +38,37 @@ PIDS = {
     "0x1F": pid(2, "s", lambda a, b: (256 * a) + b,4000)
     }
 
+@dataclass(frozen=True)
+class computedMetric:
+    name: str
+    unit: str
+    parentPid: pid
+    func: callable
+    # timestamp_ms: int
+
+computedMetrics = {
+    "acc" : computedMetric("acceleration", "m/s^2", PIDS["0x0D"], lambda window, pid: savgol_filter(window, pid))
+}
+
+def applySGFilter(window, pid):
+    # print(f"Applying SG filter to window: {window}")
+                    # self.timeWindow.append(time)
+
+    if len(window) == window.maxlen:
+        y = np.array(window, dtype=np.float64)            
+        delta = PIDS[pid].period_ms / 1000.0
+
+        dydt = savgol_filter(
+            y,
+            window_length=window.maxlen,
+            polyorder=2,
+            deriv=1,
+            delta=delta,
+            mode="interp" 
+            )
+        return float(dydt[-1])
+    else:
+        return None
 
 class Analyser:
     def __init__(self):
@@ -44,7 +76,15 @@ class Analyser:
         self.pidValues = defaultdict(list)
         self.mostRecentValues = {}
         self.currentSpeed = None
+        
         self.currentAcc = None
+        self.currentAccRaw = None
+        self.fuelCons = None
+
+        self.windowSize = 5
+        self.polyNom = 2
+        self.speedWindow = deque(maxlen=self.windowSize)
+        # self.timeWindow = deque(maxlen=self.windowSize)
 
     def process_packet(self, pid, data0, data1, seq):
         if PIDS.get(pid) is None:
@@ -55,23 +95,36 @@ class Analyser:
 
         with self.lock:
             # print(f"Processing PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
+            # for metric in computedMetrics.values():
             if pid == "0x0D":
-                if(self.currentSpeed is not None):
-                    # print(f"Previous speed: {self.currentSpeed[0]} km/h at seq {self.currentSpeed[1]}")
-                    prevVal, prevSeq = self.currentSpeed
-                    dt = (seq - prevSeq) * PIDS[pid].period_ms / 1000.0 # convert to seconds
-                    # print(f"Time since last speed sample: {dt:.3f} s")
-                    if(dt > 0):
-                        dv = (value - prevVal) / 3.6
-                        self.currentAcc = dv / dt
-                        #self.accs.append((self.currentAcc, seq))
-                        # print(f"Speed: {value} km/h, Acc: {self.currentAcc:.2f} m/s^2 at time {(seq * PIDS[pid].period_ms)/1000} s")
-                self.currentSpeed = (value, seq)
+                #if(self.currentSpeed is not None):
+                time = seq * PIDS[pid].period_ms / 1000.0
+                speed_ms = value / 3.6
+
+                self.speedWindow.append(speed_ms)
+                    # self.timeWindow.append(time)
+                dydt = applySGFilter(self.speedWindow, pid)
+                
+                self.currentAcc = dydt
+                # self.currentSpeed = (value, seq)
 
             # print(f"PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
+    
+            if pid == "0x10": # derive inst fuel cons
+                speed, speedSeq = self.mostRecentValues.get("0x0D")
+                speedTime = speedSeq * PIDS["0x0D"].period_ms / 1000.0
+                mafTime = seq * PIDS[pid].period_ms / 1000.0
+                if abs(speedTime - mafTime) < 0.5 and speed != 0: # compare timestamps
+                    ff = (value * 3600) / (14.5 * 720)
+                    fCons = ff / speed
+                    self.fuelCons = fCons
+                    # print(f"Instant fuel cons: {fCons:.2f} l/km")
+
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
-    
+
+
+
     def get_most_recent(self):
         with self.lock:
             latestData = {
@@ -80,13 +133,14 @@ class Analyser:
             }
             return {
                 "latestData": latestData, 
-                "accel": self.currentAcc
+                "accel": self.currentAcc,
+                "fuelCons": self.fuelCons
             }
 
 def read_csv(path, store, sample_rate=16):
     delay = 1.0 / sample_rate
 
-    with open('data_log2.csv', 'r') as csvfile:
+    with open('data_log.csv', 'r') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             pid = row['PID']
