@@ -199,6 +199,7 @@ def read_from_com(store):
     log_name = f"data_log_{datetime.now():%Y%m%d_%H%M%S}.csv"
     with open(log_name, "a") as f:
         f.write("PID,Data0,Data1,Seq\n")
+        f.flush()
         while True:
             line = ser.readline()
             if line:
@@ -211,6 +212,7 @@ def read_from_com(store):
                         data1 = int(parts[2], 16) 
                         seq = int(parts[3].strip(),10)
                         f.write(f"{pid},{data0:02X},{data1:02X},{seq}\n")
+                        f.flush()
                         # print(f"PID: {pid}, Data: {data0:02X} {data1:02X}, Seq: {seq}") 
                         store.process_packet(pid, data0, data1, seq)
                     except ValueError:
