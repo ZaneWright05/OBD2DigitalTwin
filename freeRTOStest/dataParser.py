@@ -81,12 +81,21 @@ class Analyser:
         
         self.currentAcc = None
         self.currentAccRaw = None
+        
         self.fuelCons = None
+        self.currentGear = None
 
         self.windowSize = 5
         self.polyNom = 2
         self.speedWindow = deque(maxlen=self.windowSize)
         # self.timeWindow = deque(maxlen=self.windowSize)
+
+    def estimate_gear(self, speed, rpm):
+        if(speed is None or rpm is None or speed == 0):
+            return 0
+        ratio = rpm / (speed) # add 1 to avoid division by zero
+        return ratio # this is just a place holder, later KNN will be used
+
 
     def process_packet(self, pid, data0, data1, seq):
         if PIDS.get(pid) is None:
@@ -99,6 +108,9 @@ class Analyser:
             # print(f"Processing PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
             # for metric in computedMetrics.values():
             if pid == "0x0D":
+                rpm_data = self.mostRecentValues.get("0x0C")
+                if rpm_data:
+                    self.currentGear = self.estimate_gear(value, rpm_data[0])
                 #if(self.currentSpeed is not None):
                 time = seq * PIDS[pid].period_ms / 1000.0
                 speed_ms = value / 3.6
@@ -109,6 +121,11 @@ class Analyser:
                 
                 self.currentAcc = dydt
                 # self.currentSpeed = (value, seq)
+            if pid == "0x0C":
+                speed_data = self.mostRecentValues.get("0x0D")
+                if speed_data:
+                    self.currentGear = self.estimate_gear(speed_data[0], value)
+                # self.currentGear = self.estimate_gear(self.mostRecentValues.get("0x0D")[0], value)
 
             # print(f"PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
     
@@ -136,7 +153,8 @@ class Analyser:
             return {
                 "latestData": latestData, 
                 "accel": self.currentAcc,
-                "fuelCons": self.fuelCons
+                "fuelCons": self.fuelCons,  
+                "gear": self.currentGear
             }
 
 

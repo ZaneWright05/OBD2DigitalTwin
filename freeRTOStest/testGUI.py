@@ -29,13 +29,13 @@ class TestScreen(BoxLayout):
         labels.add_widget(self.fuelCons_label)
 
         gearBox = BoxLayout(orientation='vertical', size_hint=(0.2, 1))
-        estGearLabel = Label(text="Estimated Gear: -")
+        self.estGearLabel = Label(text="Gear ratio: -")
         gears = GridLayout(cols=2, size_hint=(1, 1), spacing=8, padding=8)
         for i in range(1, 7):
             btn = Button(text=f"{i}")
             btn.bind(on_press=lambda instance, x=i: print(f"Gear {x} selected"))
             gears.add_widget(btn)
-        gearBox.add_widget(estGearLabel)
+        gearBox.add_widget(self.estGearLabel)
         gearBox.add_widget(gears)
 
         self.add_widget(labels)
@@ -51,6 +51,7 @@ class TestScreen(BoxLayout):
         accel = state["accel"]
         fuelCons = state["fuelCons"]
         throttle = state["latestData"].get("0x11")
+        gear = state["gear"]
 
         if speed:
             self.speed_label.text = f"Speed: {speed['value']} {speed['unit']}"
@@ -62,7 +63,8 @@ class TestScreen(BoxLayout):
             self.fuelCons_label.text = f"Fuel Cons: {fuelCons:.2f} l/km"
         if throttle:
             self.throttle_label.text = f"Throttle: {throttle['value']:.2f} {throttle['unit']}"
-
+        if gear is not None:
+            self.estGearLabel.text = f"Gear ratio: {gear:.2f}"
 
 class MyApp(App):
     def build(self):
