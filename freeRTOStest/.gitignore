@@ -5,3 +5,5 @@ note.txt
 *.csv
 !data_log2.csv
 *.db
+__pycache__/*
+!data_log_4.csv
