@@ -13,6 +13,8 @@ import serial
 from serial.tools import list_ports
 from datetime import datetime
 
+from gear_estimate import GearEstimator
+
 @dataclass(frozen=True)
 class pid:
     byte_count: int
@@ -79,11 +81,15 @@ class Analyser:
         self.mostRecentValues = {}
         self.currentSpeed = None
         
+
         self.currentAcc = None
         self.currentAccRaw = None
         
         self.fuelCons = None
-        self.currentGear = None
+        
+        self.gearEstimator = GearEstimator()
+        self.currentGear = (None, None)
+        self.currentGRatio = None
 
         self.windowSize = 5
         self.polyNom = 2
@@ -91,10 +97,31 @@ class Analyser:
         # self.timeWindow = deque(maxlen=self.windowSize)
 
     def estimate_gear(self, speed, rpm):
-        if(speed is None or rpm is None or speed == 0):
+        if(speed is None or rpm is None or speed < 5):
             return 0
-        ratio = rpm / (speed) # add 1 to avoid division by zero
-        return ratio # this is just a place holder, later KNN will be used
+        self.currentGRatio = rpm / speed
+        gear, conf = self.gearEstimator.predict(rpm, speed)
+        if gear is not None and conf is not None:
+        # and conf >= 0.25:
+            return gear
+
+        return 0
+        # ratio = rpm / (speed)
+        # if ratio > 250:
+        #     return 1
+        # elif ratio > 150 and ratio <= 250:
+        #     return 2
+        # elif ratio > 100 and ratio <= 150:
+        #     return 3
+        # elif ratio > 70 and ratio <= 100:
+        #     return 4
+        # elif ratio > 50 and ratio <= 70:
+        #     return 5
+        # elif ratio <= 50:
+        #     return 6
+        # else:
+        #     return 0
+        # return ratio # this is just a place holder, later KNN will be used
 
 
     def process_packet(self, pid, data0, data1, seq):
@@ -108,10 +135,9 @@ class Analyser:
             # print(f"Processing PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
             # for metric in computedMetrics.values():
             if pid == "0x0D":
-                rpm_data = self.mostRecentValues.get("0x0C")
-                if rpm_data:
-                    self.currentGear = self.estimate_gear(value, rpm_data[0])
-                #if(self.currentSpeed is not None):
+                rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
+                if rpm_data is not None and seq == rpm_seq and self.currentGear[1] != seq:
+                    self.currentGear = (self.estimate_gear(value, rpm_data), seq)
                 time = seq * PIDS[pid].period_ms / 1000.0
                 speed_ms = value / 3.6
 
@@ -122,9 +148,10 @@ class Analyser:
                 self.currentAcc = dydt
                 # self.currentSpeed = (value, seq)
             if pid == "0x0C":
-                speed_data = self.mostRecentValues.get("0x0D")
-                if speed_data:
-                    self.currentGear = self.estimate_gear(speed_data[0], value)
+                speed_data, speed_seq = self.mostRecentValues.get("0x0D", (None, None))
+                if speed_data is not None and seq == speed_seq and self.currentGear[1] != seq:
+                    # update if same and not already used for gear estimation
+                    self.currentGear = (self.estimate_gear(speed_data, value), seq) # store timestamp
                 # self.currentGear = self.estimate_gear(self.mostRecentValues.get("0x0D")[0], value)
 
             # print(f"PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
@@ -142,7 +169,37 @@ class Analyser:
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
 
+    def store_gear(self, gear: int):
+        with self.lock:
+            speed, speedSeq = self.mostRecentValues.get("0x0D", (None, None))
+            rpm, rpmSeq = self.mostRecentValues.get("0x0C", (None, None))
+            if speed is None or rpm is None or speed < 5:
+                return
+            matching = False
+            if speedSeq != rpmSeq:
+                if speedSeq > rpmSeq and len(self.pidValues["0x0D"]) >= 2: ## speed is more recent get previous so it matches rpm
+                    speedOld, speedOldSeq = self.pidValues["0x0D"][-2]
+                    if speedOldSeq == rpmSeq:
+                        speed = speedOld
+                        matching = True
+                elif len(self.pidValues["0x0C"]) >= 2:
+                    rpmOld, rpmOldSeq = self.pidValues["0x0C"][-2]
+                    if rpmOldSeq == speedSeq:
+                        rpm = rpmOld
+                        matching = True
+            # self.currentGear = gear
+            else:
+                matching = True
 
+                
+            if not matching:
+                print(f"No matching RPM and speed data for gear label, skipping {rpmSeq}, {speedSeq}...")
+                return
+
+            with open("gear_estim.csv", "a") as f:
+                f.write(f"{self.mostRecentValues.get('0x0C', (None, None))[0]},{self.mostRecentValues.get('0x0D', (None, None))[0]},{self.currentAcc:.2f},{gear}\n")
+                f.flush()
+            self.gearEstimator.add_data_point(rpm, speed, gear)
 
     def get_most_recent(self):
         with self.lock:
@@ -154,7 +211,8 @@ class Analyser:
                 "latestData": latestData, 
                 "accel": self.currentAcc,
                 "fuelCons": self.fuelCons,  
-                "gear": self.currentGear
+                "gear": self.currentGear[0],
+                "ratio": self.currentGRatio
             }
 
 
@@ -223,7 +281,7 @@ def read_from_com(store):
 def read_csv(path, store, sample_rate=16):
     delay = 1.0 / sample_rate
 
-    with open('data_log2.csv', 'r') as csvfile:
+    with open('data_log_4.csv', 'r') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             pid = row['PID']
@@ -232,101 +290,3 @@ def read_csv(path, store, sample_rate=16):
             seq = int(row['Seq'])
             store.process_packet(pid, data0, data1, seq)
             sleep(delay)
-
-
-
-# pidValues = defaultdict(list)
-# mostRecentValues = {}
-
-# #previousSpeed = None # [(val, seq)]
-# currentSpeed = None # (value, seq)
-# currentAcc = None
-
-# # WINDOWSIZE = 9
-# # speed_window = deque(maxlen=WINDOWSIZE)
-
-# times = []
-# speeds = []
-# accs = []
-
-# with open('data_log2.csv', 'r') as csvfile:
-#     reader = csv.DictReader(csvfile)
-#     for row in reader:
-#         pid = row['PID']
-#         data0 = int(row['Data0'], 16)
-#         data1 = int(row['Data1'], 16)
-#         seq = int(row['Seq'])
-#         value = pids[pid].func(data0, data1)
-#         if(pid == "0x0D"):
-
-#             ## needs fixing
-#             # time_ms = seq * pids[pid].period + (pids[pid].period/2)
-#             # speed_ms = value / 3.6
-#             # speed_window.append((speed_ms, time_ms))
-#             # if(len(speed_window) < WINDOWSIZE):
-#             #     continue # not enough data to calc acc
-#             # times = np.array([t for _, t in speed_window])
-#             # speeds = np.array([s for s, _ in speed_window])
-
-#             # local_t = times - times[-1] # offset times to 0 at the most recent sample
-#             # coefficients = np.polyfit(local_t, speeds, 2)
-#             # currentAcc = coefficients[1] # we are at t=0 so acc is just the linear term
-#             # print(f"Speed: {value} km/h, Acc: {currentAcc:.2f} m/s^2 at time {(seq * pids[pid].period)/1000} s")
-
-#             if(currentSpeed is not None):
-#                 prevVal, prevSeq = currentSpeed
-#                 dt = (seq - prevSeq) * pids[pid].period / 1000.0 # convert to seconds
-
-#                 if(dt > 0):
-#                     dv = (value - prevVal) / 3.6
-#                     currentAcc = dv / dt
-#                     accs.append((currentAcc, seq))
-#                     print(f"Speed: {value} km/h, Acc: {currentAcc:.2f} m/s^2 at time {(seq * pids[pid].period)/1000} s")
-#             #     # convert to m/s, then div by number time between samples -> diff * period then conv to s
-#             currentSpeed = (value, seq)
-#             # speeds.append((value, seq))
-#             #times.append(seq * pids[pid].period / 1000.0)
-#         pidValues[pid].append((value, seq))
-#         mostRecentValues[pid] = (value, seq)
-#         # print(f"PID: {pid}, Value: {value} {pids[pid].unit}, Seq: {seq}")
-#         # pidValues[pid].append((data0, data1, seq))
-#         sleep(1/128) # average of 16 samples/s
-
-    #print(f"PID: {pid}, Data: {data0:02X} {data1:02X}, Seq: {seq}")
-
-
-# fig, ax1 = plt.subplots(figsize=(10, 6))
-# timesy = []
-# speedsy = []
-
-# for a, seq in speeds:
-#     print(f"Speed: {a} km/h at time {seq * 333} ms")
-#     x = seq * 333 / 1000  # Convert ms to seconds
-#     y = a
-#     timesy.append(x)
-#     speedsy.append(y)
-
-# ax1.plot(timesy, speedsy, color="tab:blue", linewidth=1.5, label="Speed(km/h)")
-# ax1.set_xlabel("Time (s)")
-# ax1.set_ylabel("Speed (km/h)", color="tab:blue")
-# ax1.tick_params(axis="y", labelcolor="tab:blue")
-
-# timesx = []
-# thtrrlx = []
-# maxRPM = 0
-
-# for a, seq in accs:
-#   #  print(f"RPM: { (a * 256 + b )/ 4 } at time {seq * 333} ms")
-#     x = seq * 333 / 1000  # Convert ms to seconds
-#     timesx.append(x)
-#     thtrrlx.append(a)
-
-# # print(f"Max RPM: {maxRPM}")
-
-# ax2 = ax1.twinx()
-# ax2.plot(timesx, thtrrlx, color="tab:red", linewidth=1, label="RPM")
-# ax2.set_ylabel("RPM", color="tab:red")
-# ax2.tick_params(axis="y", labelcolor="tab:red")
-
-# fig.tight_layout()
-# plt.show()

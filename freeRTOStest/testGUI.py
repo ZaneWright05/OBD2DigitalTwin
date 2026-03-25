@@ -29,13 +29,15 @@ class TestScreen(BoxLayout):
         labels.add_widget(self.fuelCons_label)
 
         gearBox = BoxLayout(orientation='vertical', size_hint=(0.2, 1))
-        self.estGearLabel = Label(text="Gear ratio: -")
+        self.estGearLabel = Label(text="Gear: -")
+        self.estGRatioLabel = Label(text="Ratio: -")
         gears = GridLayout(cols=2, size_hint=(1, 1), spacing=8, padding=8)
         for i in range(1, 7):
             btn = Button(text=f"{i}")
-            btn.bind(on_press=lambda instance, x=i: print(f"Gear {x} selected"))
+            btn.bind(on_press=lambda instance, x=i: analyser.store_gear(int(x)))
             gears.add_widget(btn)
         gearBox.add_widget(self.estGearLabel)
+        gearBox.add_widget(self.estGRatioLabel)
         gearBox.add_widget(gears)
 
         self.add_widget(labels)
@@ -64,7 +66,11 @@ class TestScreen(BoxLayout):
         if throttle:
             self.throttle_label.text = f"Throttle: {throttle['value']:.2f} {throttle['unit']}"
         if gear is not None:
-            self.estGearLabel.text = f"Gear ratio: {gear:.2f}"
+            self.estGearLabel.text = f"Gear: {gear}"
+            if gear == 0:
+                self.estGearLabel.text = f"Gear: --"
+        if state["ratio"] is not None:
+            self.estGRatioLabel.text = f"Ratio: {state['ratio']:.2f}"
 
 class MyApp(App):
     def build(self):
@@ -73,6 +79,11 @@ class MyApp(App):
         self.worker = Thread(target=read_from_com, 
                              args=(self.analyser,), 
                              daemon = True)
+
+        
+        # self.worker = Thread(target=read_csv, 
+        #                      args=("",self.analyser,128), 
+        #                      daemon = True)
 
         self.worker.start()
 
