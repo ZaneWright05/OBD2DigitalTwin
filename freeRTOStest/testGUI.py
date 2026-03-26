@@ -16,6 +16,7 @@ height = 480 # 85.92 mm
 Config.set('graphics', 'fullscreen', '1')
 Config.set('graphics', 'width', str(width))
 Config.set('graphics', 'height', str(height))
+Config.set('graphics', 'show_taskbar', '0')
 
 class TestScreen(BoxLayout):
     def __init__(self, analyser, **var_args):
