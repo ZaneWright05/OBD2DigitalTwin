@@ -2,12 +2,20 @@ from threading import Thread
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.window import Config
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
 from dataParser import Analyser, read_csv, read_from_com
+
+width = 800 # 154.08 mm
+height = 480 # 85.92 mm
+
+Config.set('graphics', 'fullscreen', '1')
+Config.set('graphics', 'width', str(width))
+Config.set('graphics', 'height', str(height))
 
 class TestScreen(BoxLayout):
     def __init__(self, analyser, **var_args):
