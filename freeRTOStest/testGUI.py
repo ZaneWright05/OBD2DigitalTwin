@@ -13,14 +13,21 @@ from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
 from dataParser import Analyser, read_csv, read_from_com
-
-# width = 680 # 154.08 mm
-# height = 480 # 85.92 mm
-
+screen_width_px = 800 # 154.08 mm
+screen_width_mm = 154.08
+screen_height_px = 480 # 85.92 mm
+screen_height_mm = 85.92
 # Config.set('graphics', 'fullscreen', '1')
 # Config.set('graphics', 'width', str(width))
 # Config.set('graphics', 'height', str(height))
 # Config.set('graphics', 'show_taskbar', '0')
+
+def convert_dimensions(width_mm, height_mm):
+    px_per_mm_x = screen_width_px / screen_width_mm
+    px_per_mm_y = screen_height_px / screen_height_mm
+    width_px = int(width_mm * px_per_mm_x)
+    height_px = int(height_mm * px_per_mm_y)
+    return width_px, height_px
 
 class TestScreen(BoxLayout):
     def __init__(self, analyser, **var_args):
@@ -46,7 +53,9 @@ class TestScreen(BoxLayout):
         self.estGRatioLabel = Label(text="Ratio: -")
         gears = GridLayout(cols=2, size_hint=(1, 1), spacing=8, padding=8)
         for i in range(1, 7):
-            btn = Button(text=f"{i}")
+            btn = Button(text=f"{i}",
+            size_hint=(None, None),   # disable auto scaling
+            size=(convert_dimensions(17.5, 17.5)))  # set fixed size in mm
             btn.bind(on_press=lambda instance, x=i: analyser.store_gear(int(x)))
             gears.add_widget(btn)
         gearBox.add_widget(self.estGearLabel)
