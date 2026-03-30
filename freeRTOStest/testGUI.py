@@ -18,7 +18,7 @@ from kivy.uix.gridlayout import GridLayout
 
 from dataParser import Analyser, read_csv, read_from_com
 from helpers import pid
-from metricAnalyser import Metrics, MetricAnalyser
+from metricAnalyser import Metrics, MetricAnalyser, Event
 
 screen_width_px = 800 # 154.08 mm
 screen_width_mm = 154.08
@@ -83,6 +83,11 @@ class TestScreen(BoxLayout):
         gearBox.add_widget(self.estGRatioLabel)
         gearBox.add_widget(gears)
 
+        eventBox = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
+        self.eventLabel = Label(text="Current Event: --", size_hint=(1, 0.1))
+       # self.eventVisibleTimer = 2 # seconds to show event after it ends
+        gearBox.add_widget(self.eventLabel)
+
         self.add_widget(labels)
         self.add_widget(gearBox)
 
@@ -97,6 +102,12 @@ class TestScreen(BoxLayout):
         fuelCons = state["fuelCons"]
         throttle = state["latestData"].get("0x11")
         gear = state["gear"]
+        event = state["event"]
+        if event:
+            self.eventLabel.text = f"RPM Event: {float(rpm.pid.period_ms * event.timestamp)/1000:.2f}s, Type: {event.type}, Duration: {event.length} units (Priority {event.priority})"
+        else:
+            
+            self.eventLabel.text = "Current Event: --"
 
         if speed:
             self.speed_label.text = f"Speed: {speed['value']} {speed['unit']}"
@@ -132,7 +143,7 @@ class MyApp(App):
 
         
         self.worker = Thread(target=read_csv, 
-                             args=("",self.analyser,32), 
+                             args=("",self.analyser,64), 
                              daemon = True)
 
         self.worker.start()

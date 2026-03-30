@@ -4,6 +4,7 @@ import csv
 import os
 import threading
 from collections import defaultdict, deque
+import time
 # import matplotlib.pyplot as plt
 import joblib
 from scipy.signal import savgol_filter
@@ -87,7 +88,12 @@ class Analyser:
             print(f"Loaded historic metrics for RPM: {historicMetrics['0x0C']}")
         else:
             print("No historic metrics found for RPM.")
-        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=6000, lowThreshold=600, window_size=15, historicMetrics=historicMetrics.get("0x0C"))
+        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=6000, lowThreshold=500, rocMin=0.5,window_size=15, historicMetrics=historicMetrics.get("0x0C"))
+        self.rpmMetric.parent = self
+
+        self.lastEvent = None
+        self.lastEventEndTime = 0
+        self.displayTime = 2 # in seconds
 
         self.currentAcc = None
         self.currentAccRaw = None
@@ -171,7 +177,6 @@ class Analyser:
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
 
-
     def store_gear(self, gear: int):
         with self.lock:
             speed, speedSeq = self.mostRecentValues.get("0x0D", (None, None))
@@ -210,10 +215,30 @@ class Analyser:
                 pid: {"value": value, "unit": PIDS[pid].unit}
                 for pid, (value, seq) in self.mostRecentValues.items()
             }
+            recentEvent = None
+            if(self.rpmMetric.active_events):
+                highestPir = -1  
+                for event in self.rpmMetric.active_events.values():
+                    if event.priority > highestPir:
+                        highestPir = event.priority
+                        recentEvent = event
+                    elif event.priority == highestPir:
+                        if recentEvent is None or event.timestamp > recentEvent.timestamp:
+                            recentEvent = event
+                self.lastEvent = recentEvent
+                self.lastEventEndTime = 0
+            else: # handling for no active events but giving user time to read
+                if self.lastEvent and self.lastEventEndTime == 0:
+                    self.lastEventEndTime = time.time()
+                if self.lastEvent and (time.time() - self.lastEventEndTime) < self.displayTime:
+                    recentEvent = self.lastEvent
+                else:
+                    self.lastEvent = None
+                    self.lastEventEndTime = 0
             return {
                 "latestData": latestData,
                 "rpm" : self.rpmMetric,
-
+                "event": recentEvent,
                 "accel": self.currentAcc,
                 "fuelCons": self.fuelCons,  
                 "gear": self.currentGear[0],

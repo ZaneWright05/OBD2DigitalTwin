@@ -25,9 +25,9 @@ class HistoricMetrics(Metrics):
 
 @dataclass
 class Event():
-    timestamp: float
+    timestamp: float # start seq
     type: str
-    length: int # period * datapoints in thresh
+    length: int # * period for the acc len
     details: list[str] # string based info
     values: list[float] # raw values during event, for later analysis
     priority: int
@@ -36,11 +36,12 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, highThreshold: float = None, lowThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None):
+    def __init__(self, pid: pid, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
         self.lowThreshold = lowThreshold
+        self.rocMin = rocMin
         self.historicMetrics = historicMetrics
 
         self.window_size = window_size
@@ -141,9 +142,10 @@ class MetricAnalyser:
             self.above_event(value, seq)
         if self.lowThreshold is not None:
             self.below_event(value, seq)
+        
         self.rapid_increase(seq)
         self.rapid_decrease(seq)
-    
+
     def end_event(self, eventType, seq):
         if self.active_events.get(eventType):
                 print(f"Ending {eventType} event")
@@ -178,7 +180,7 @@ class MetricAnalyser:
 
     def rapid_decrease(self, seq):
         roc = self.metrics.instROC
-        if roc >= 0:
+        if roc >= 0 or abs(roc) < self.rocMin:
             self.end_event("rapid_decrease", seq)
             return
         if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
@@ -203,7 +205,7 @@ class MetricAnalyser:
 
     def rapid_increase(self, seq):
         roc = self.metrics.instROC
-        if roc <= 0:
+        if roc <= 0 or abs(roc) < self.rocMin:
             self.end_event("rapid_increase", seq)
             return
         
@@ -241,7 +243,7 @@ class MetricAnalyser:
         pri = None
         if val >= baseLine * 0.9: # close to abs max
             pri = 2
-        elif val >= dynamicThreshold * 0.85: # close to worst val recorded
+        elif val >= dynamicThreshold: # close to worst val recorded
             pri = 1
         elif avg != 0 and val >= avg * 1.5: # above average
             pri = 0
@@ -265,7 +267,7 @@ class MetricAnalyser:
         pri = None
         if val <= baseLine * 1.1: # close to abs min
             pri = 2
-        elif val <= dynamicThreshold * 1.15: # close to lowest val recorded
+        elif val <= dynamicThreshold: # close to lowest val recorded
             pri = 1
         elif avg != 0 and val <= avg * 0.5: # below average
             pri = 0
