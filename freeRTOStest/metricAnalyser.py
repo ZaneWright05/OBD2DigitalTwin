@@ -28,15 +28,19 @@ class Event():
     timestamp: float
     type: str
     length: int # period * datapoints in thresh
-    details: dict
+    details: list[str] # string based info
     values: list[float] # raw values during event, for later analysis
     priority: int
 
+eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_decrease", ]
+minTrips = 3
+
 class MetricAnalyser:
-    def __init__(self, pid: pid, threshold, window_size, historicMetrics: HistoricMetrics = None):
+    def __init__(self, pid: pid, highThreshold: float = None, lowThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None):
         self.pid = pid
         self.data = []
-        self.threshold = threshold
+        self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
+        self.lowThreshold = lowThreshold
         self.historicMetrics = historicMetrics
 
         self.window_size = window_size
@@ -49,9 +53,7 @@ class MetricAnalyser:
         self.metrics = Metrics()
         self.events = []
 
-        self.above_threshold = False
-        self.event_length = 0
-        self.active_event = None
+        self.active_events = {}
 
     def update_HistoricMetrics(self):
         if self.historicMetrics is None:
@@ -135,34 +137,140 @@ class MetricAnalyser:
             self.metrics.instROC = 0.0
             self.metrics.wAvgROC = 0.0
 
+        if self.highThreshold is not None:
+            self.above_event(value, seq)
+        if self.lowThreshold is not None:
+            self.below_event(value, seq)
+        self.rapid_increase(seq)
+        self.rapid_decrease(seq)
+    
+    def end_event(self, eventType, seq):
+        if self.active_events.get(eventType):
+                print(f"Ending {eventType} event")
+                event = self.active_events.pop(eventType)
+                self.events.append(event)
+                print(f"Ended Event: {event.type} at {seq}, duration {event.length}, details: {event.details}, values: {event.values}, priority: {event.priority}")
+        return
 
-
-        if value > self.threshold:
-            if self.above_threshold:
-                # self.event_length += 1
-                self.active_event.length += 1
-                self.active_event.values.append(value)
-            else:
-                self.above_threshold = True
-                self.event_length = 1
-                self.active_event = Event(
+    def handle_event(self, seq, eventType, val, pri):
+        if(self.active_events.get(eventType)):
+            event = self.active_events[eventType]
+            print(f"Event {eventType}, updating values")
+            currPri = event.priority
+            event.length += 1
+            event.priority = pri
+            event.values.append((seq, val))
+            if pri > currPri:
+                event.details.append(f"{seq}: {val}, new priority: {pri}")
+            elif pri < currPri:
+                event.details.append(f"{seq}: {val}, new priority: {pri}")
+            self.active_events[eventType] = event
+        else:
+            print(f"New {eventType} event detected, creating event")
+            self.active_events[eventType] = Event(
                     timestamp=seq,
-                    type="above_threshold",
+                    type=eventType,
                     length=1,
-                    details={"pid": self.pid, "threshold": self.threshold},
-                    values=[value]
-                )
-        elif self.above_threshold:
+                    details=[f"{seq}: {val}, priority {pri}"],
+                    values=[(seq, val)],
+                    priority=pri
+            )
 
-            self.above_threshold = False
-            # self.active_event.length = self.event_length * pid.period_ms
-            self.events.append(self.active_event)
+    def rapid_decrease(self, seq):
+        roc = self.metrics.instROC
+        if roc >= 0:
+            self.end_event("rapid_decrease", seq)
+            return
+        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
+            bound = self.metrics.wAvgROC * 2 if self.metrics.wAvgROC < 0 else float('-inf')
+            hist_min = bound
+        else:
+            hist_min = self.historicMetrics.minInstROC if self.historicMetrics.minInstROC != float('inf') else -0.1
+            bound = min(hist_min * 1.2, self.metrics.wAvgROC * 2)
 
-            self.active_event = None
+        pri = None
+        if roc < bound:
+            pri = 2
+        elif roc < hist_min * 1.2:
+            pri = 1
+        elif roc < self.metrics.wAvgROC * 1.5:
+            pri = 0
+        else:
+            self.end_event("rapid_decrease", seq)
+            return
+        
+        self.handle_event(seq, "rapid_decrease", roc, pri)
 
+    def rapid_increase(self, seq):
+        roc = self.metrics.instROC
+        if roc <= 0:
+            self.end_event("rapid_increase", seq)
+            return
+        
+        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
+            bound = self.metrics.wAvgROC * 2 if self.metrics.wAvgROC > 0 else float('inf')
+            hist_max = bound
+        else:
+            hist_max = self.historicMetrics.maxInstROC
+            bound = max(hist_max * 1.2, self.metrics.wAvgROC * 2)
 
+        pri = None
+        if roc > bound:
+            pri = 2
+        elif roc > hist_max * 1.2:
+            pri = 1
+        elif roc > self.metrics.wAvgROC * 1.5:
+            pri = 0
+        else:
+            self.end_event("rapid_increase", seq)
+            return
+        
+        self.handle_event(seq, "rapid_increase", roc, pri) 
 
-    # def calc_average(self):
-    #     if not self.data:
-    #         return 0.0
-    #     return sum(v for _, v in self.data) / len(self.data)
+    def above_event(self, val, seq):
+        baseLine = self.highThreshold if self.highThreshold is not None else float('inf')
+        if(self.historicMetrics.tripCount <= minTrips): # not enough historic data
+            historicPeak = 0
+            avg = 0
+            dynamicThreshold = baseLine * 0.85
+        else:
+            historicPeak = self.historicMetrics.max if self.historicMetrics and self.historicMetrics.max > 0 else 0
+            avg = self.historicMetrics.average if self.historicMetrics else 0
+            dynamicThreshold = max(baseLine * 0.85, historicPeak * 0.85)
+
+        pri = None
+        if val >= baseLine * 0.9: # close to abs max
+            pri = 2
+        elif val >= dynamicThreshold * 0.85: # close to worst val recorded
+            pri = 1
+        elif avg != 0 and val >= avg * 1.5: # above average
+            pri = 0
+        else:
+            self.end_event("above_threshold", seq)
+            return
+        
+        self.handle_event(seq, "above_threshold", val, pri)
+
+    def below_event(self, val, seq):
+        baseLine = self.lowThreshold if self.lowThreshold is not None else float('-inf')
+        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
+            historicMin = baseLine
+            avg = 0
+            dynamicThreshold = baseLine * 1.15
+        else:
+            historicMin = self.historicMetrics.min if self.historicMetrics.min != float('inf') else baseLine
+            avg = self.historicMetrics.average if self.historicMetrics else baseLine
+            dynamicThreshold = min(baseLine * 1.15, historicMin * 1.15)
+
+        pri = None
+        if val <= baseLine * 1.1: # close to abs min
+            pri = 2
+        elif val <= dynamicThreshold * 1.15: # close to lowest val recorded
+            pri = 1
+        elif avg != 0 and val <= avg * 0.5: # below average
+            pri = 0
+        else:
+            self.end_event("below_threshold", seq)
+            return
+        
+        self.handle_event(seq, "below_threshold", val, pri)

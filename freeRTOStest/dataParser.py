@@ -84,10 +84,10 @@ class Analyser:
             historicMetrics = {}
 
         if "0x0C" in historicMetrics:
-            print(f"Loaded historic metrics for RPM: {historicMetrics['0x0C']}")#
+            print(f"Loaded historic metrics for RPM: {historicMetrics['0x0C']}")
         else:
             print("No historic metrics found for RPM.")
-        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], threshold=8000, window_size=15, historicMetrics=historicMetrics.get("0x0C"))
+        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=6000, lowThreshold=600, window_size=15, historicMetrics=historicMetrics.get("0x0C"))
 
         self.currentAcc = None
         self.currentAccRaw = None
@@ -107,7 +107,8 @@ class Analyser:
         # save historic metrics to file
         joblib.dump({
             "0x0C": self.rpmMetric.update_HistoricMetrics()
-        }, "historicMetrics.joblib") # currently just the most recent trip, will need to aggregrate all data
+        }, "historicMetrics.joblib")
+        print(f"{self.rpmMetric.historicMetrics}")
 
     def estimate_gear(self, speed, rpm):
         if(speed is None or rpm is None):
