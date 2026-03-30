@@ -1,9 +1,11 @@
 # test script to analyse the data log from recieve.py
 
 import csv
+import os
 import threading
 from collections import defaultdict, deque
 # import matplotlib.pyplot as plt
+import joblib
 from scipy.signal import savgol_filter
 from dataclasses import dataclass
 #from scipy.signal import savgol_filter
@@ -14,13 +16,8 @@ from serial.tools import list_ports
 from datetime import datetime
 
 from gear_estimate import GearEstimator
-
-@dataclass(frozen=True)
-class pid:
-    byte_count: int
-    unit: str
-    func: callable
-    period_ms: int
+from metricAnalyser import MetricAnalyser, Metrics, Event
+from helpers import pid
 
 PIDS = {
     # need to add engine load to the design
@@ -81,6 +78,16 @@ class Analyser:
         self.mostRecentValues = {}
         self.currentSpeed = None
         
+        if os.path.exists("historicMetrics.joblib"):
+            historicMetrics = joblib.load("historicMetrics.joblib")
+        else:
+            historicMetrics = {}
+
+        if "0x0C" in historicMetrics:
+            print(f"Loaded historic metrics for RPM: {historicMetrics['0x0C']}")#
+        else:
+            print("No historic metrics found for RPM.")
+        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], threshold=8000, window_size=15, historicMetrics=historicMetrics.get("0x0C"))
 
         self.currentAcc = None
         self.currentAccRaw = None
@@ -96,9 +103,19 @@ class Analyser:
         self.speedWindow = deque(maxlen=self.windowSize)
         # self.timeWindow = deque(maxlen=self.windowSize)
 
+    def save_HistoricMetrics(self):
+        # save historic metrics to file
+        joblib.dump({
+            "0x0C": self.rpmMetric.update_HistoricMetrics()
+        }, "historicMetrics.joblib") # currently just the most recent trip, will need to aggregrate all data
+
     def estimate_gear(self, speed, rpm):
-        if(speed is None or rpm is None or speed < 5):
+        if(speed is None or rpm is None):
             return 0
+        if speed < 5 or rpm < self.rpmMetric.metrics.min * 1.25:
+            # low speed or rpm we assume neutral
+            return 0
+    
         self.currentGRatio = rpm / speed
         gear, conf = self.gearEstimator.predict(rpm, speed)
         if gear is not None and conf is not None:
@@ -106,23 +123,6 @@ class Analyser:
             return gear
 
         return 0
-        # ratio = rpm / (speed)
-        # if ratio > 250:
-        #     return 1
-        # elif ratio > 150 and ratio <= 250:
-        #     return 2
-        # elif ratio > 100 and ratio <= 150:
-        #     return 3
-        # elif ratio > 70 and ratio <= 100:
-        #     return 4
-        # elif ratio > 50 and ratio <= 70:
-        #     return 5
-        # elif ratio <= 50:
-        #     return 6
-        # else:
-        #     return 0
-        # return ratio # this is just a place holder, later KNN will be used
-
 
     def process_packet(self, pid, data0, data1, seq):
         if PIDS.get(pid) is None:
@@ -148,6 +148,7 @@ class Analyser:
                 self.currentAcc = dydt
                 # self.currentSpeed = (value, seq)
             if pid == "0x0C":
+                self.rpmMetric.add_data_point(seq, value)
                 speed_data, speed_seq = self.mostRecentValues.get("0x0D", (None, None))
                 if speed_data is not None and seq == speed_seq and self.currentGear[1] != seq:
                     # update if same and not already used for gear estimation
@@ -168,6 +169,7 @@ class Analyser:
 
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
+
 
     def store_gear(self, gear: int):
         with self.lock:
@@ -191,7 +193,7 @@ class Analyser:
             else:
                 matching = True
 
-                
+
             if not matching:
                 print(f"No matching RPM and speed data for gear label, skipping {rpmSeq}, {speedSeq}...")
                 return
@@ -208,7 +210,9 @@ class Analyser:
                 for pid, (value, seq) in self.mostRecentValues.items()
             }
             return {
-                "latestData": latestData, 
+                "latestData": latestData,
+                "rpm" : self.rpmMetric,
+
                 "accel": self.currentAcc,
                 "fuelCons": self.fuelCons,  
                 "gear": self.currentGear[0],

@@ -8,3 +8,4 @@ note.txt
 __pycache__/*
 !data_log_4.csv
 !gear_estim.csv
+historicMetrics.joblib

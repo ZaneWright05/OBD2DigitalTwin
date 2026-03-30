@@ -4,6 +4,10 @@ Config.set("graphics", "fullscreen", "auto")
 Config.set("graphics", "resizable", "0")
 Config.set("graphics", "borderless", "1")
 
+from kivy.core.window import Window
+if os.name != 'nt':  # Windows
+    Window.show_cursor = False
+
 from kivy.app import App
 from kivy.clock import Clock
 from threading import Thread
@@ -13,6 +17,9 @@ from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
 from dataParser import Analyser, read_csv, read_from_com
+from helpers import pid
+from metricAnalyser import Metrics, MetricAnalyser
+
 screen_width_px = 800 # 154.08 mm
 screen_width_mm = 154.08
 screen_height_px = 480 # 85.92 mm
@@ -32,7 +39,7 @@ def convert_dimensions(width_mm, height_mm):
         px_per_mm_y = screen_height_px / screen_height_mm
     width_px = int(width_mm * px_per_mm_x)
     height_px = int(height_mm * px_per_mm_y)
-    print(f"Converting {width_mm}mm x {height_mm}mm to {width_px}px x {height_px}px")
+    # print(f"Converting {width_mm}mm x {height_mm}mm to {width_px}px x {height_px}px")
     return width_px, height_px
 
 class TestScreen(BoxLayout):
@@ -43,13 +50,21 @@ class TestScreen(BoxLayout):
 
         labels = GridLayout(cols=1, size_hint=(0.5, 1))
         self.speed_label = Label(text="Speed: --")
+        rpm_box = BoxLayout(orientation='vertical', size_hint=(0.5, 0.4))
         self.rpm_label = Label(text="RPM --")
+        self.rpm_sub_label = Label(text="", font_size=10)
+        rpm_box.add_widget(self.rpm_label)
+        rpm_box.add_widget(self.rpm_sub_label)
         self.accel_label = Label(text="Accel: --")
         self.throttle_label = Label(text="Throttle: --")
         self.fuelCons_label = Label(text="Fuel Cons: --")
 
         labels.add_widget(self.speed_label)
-        labels.add_widget(self.rpm_label)
+
+        labels.add_widget(rpm_box)
+        # labels.add_widget(self.rpm_label)
+        # labels.add_widget(self.rpm_sub_label)
+        
         labels.add_widget(self.accel_label)
         labels.add_widget(self.throttle_label)
         labels.add_widget(self.fuelCons_label)
@@ -77,7 +92,7 @@ class TestScreen(BoxLayout):
         state = self.analyser.get_most_recent()
 
         speed = state["latestData"].get("0x0D")
-        rpm = state["latestData"].get("0x0C")
+        rpm = state["rpm"]
         accel = state["accel"]
         fuelCons = state["fuelCons"]
         throttle = state["latestData"].get("0x11")
@@ -85,8 +100,14 @@ class TestScreen(BoxLayout):
 
         if speed:
             self.speed_label.text = f"Speed: {speed['value']} {speed['unit']}"
-        if rpm:
-            self.rpm_label.text = f"RPM: {rpm['value']} {rpm['unit']}"
+        if rpm.metrics:
+            self.rpm_sub_label.text = (f"AvgROC: {rpm.metrics.wAvgROC:.2f} {rpm.pid.unit}\n"+
+                                       f"InstROC: {rpm.metrics.instROC:.2f} {rpm.pid.unit}/s\n"+
+                                       f"Avg: {rpm.metrics.average:.2f} {rpm.pid.unit}\n"+
+                                       f"Max: {rpm.metrics.max:.2f} {rpm.pid.unit}\n"+
+                                       f"Min: {rpm.metrics.min:.2f} {rpm.pid.unit}")
+            
+            self.rpm_label.text = f"RPM: {int(rpm.metrics.current)} {rpm.pid.unit}"
         if accel:
             self.accel_label.text = f"Accel: {accel:.2f} m/s^2"
         if fuelCons is not None:
@@ -94,9 +115,10 @@ class TestScreen(BoxLayout):
         if throttle:
             self.throttle_label.text = f"Throttle: {throttle['value']:.2f} {throttle['unit']}"
         if gear is not None:
-            self.estGearLabel.text = f"Gear: {gear}"
             if gear == 0:
-                self.estGearLabel.text = f"Gear: --"
+                self.estGearLabel.text = f"Gear: N"
+            else:   
+                self.estGearLabel.text = f"Gear: {gear}"
         if state["ratio"] is not None:
             self.estGRatioLabel.text = f"Ratio: {state['ratio']:.2f}"
 
@@ -104,18 +126,23 @@ class MyApp(App):
     def build(self):
         self.analyser = Analyser()
 
-        self.worker = Thread(target=read_from_com, 
-                             args=(self.analyser,), 
-                             daemon = True)
+        # self.worker = Thread(target=read_from_com, 
+        #                      args=(self.analyser,), 
+        #                      daemon = True)
 
         
-        # self.worker = Thread(target=read_csv, 
-        #                      args=("",self.analyser,128), 
-        #                      daemon = True)
+        self.worker = Thread(target=read_csv, 
+                             args=("",self.analyser,32), 
+                             daemon = True)
 
         self.worker.start()
 
         return TestScreen(self.analyser)
+
+    def on_stop(self):
+        print("App is stopping, saving historic metrics...")
+        self.analyser.save_HistoricMetrics()
+        print("Historic Metrics saved.")
 
 if __name__ == "__main__":
     MyApp().run()
