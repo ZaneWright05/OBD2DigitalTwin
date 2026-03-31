@@ -1,12 +1,18 @@
 from kivy.config import Config
 import os
-Config.set("graphics", "fullscreen", "auto")
-Config.set("graphics", "resizable", "0")
-Config.set("graphics", "borderless", "1")
+
 
 from kivy.core.window import Window
 if os.name != 'nt':  # Windows
     Window.show_cursor = False
+    Config.set("graphics", "fullscreen", "auto")
+    Config.set("graphics", "resizable", "0")
+    Config.set("graphics", "borderless", "1")
+else:
+    Config.set('graphics', 'width', '800')
+    Config.set('graphics', 'height', '480')
+    Config.set('graphics', 'resizable', '0')
+    Config.set('graphics', 'borderless', '1')
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -49,7 +55,13 @@ class TestScreen(BoxLayout):
         self.analyser = analyser 
 
         labels = GridLayout(cols=1, size_hint=(0.5, 1))
+
+        speed_box = BoxLayout(orientation='vertical', size_hint=(0.5, 0.4))
         self.speed_label = Label(text="Speed: --")
+        self.speed_sub_label = Label(text="", font_size=10)
+        speed_box.add_widget(self.speed_label)
+        speed_box.add_widget(self.speed_sub_label)
+
         rpm_box = BoxLayout(orientation='vertical', size_hint=(0.5, 0.4))
         self.rpm_label = Label(text="RPM --")
         self.rpm_sub_label = Label(text="", font_size=10)
@@ -59,8 +71,8 @@ class TestScreen(BoxLayout):
         self.throttle_label = Label(text="Throttle: --")
         self.fuelCons_label = Label(text="Fuel Cons: --")
 
-        labels.add_widget(self.speed_label)
-
+        # labels.add_widget(self.speed_label)
+        labels.add_widget(speed_box)
         labels.add_widget(rpm_box)
         # labels.add_widget(self.rpm_label)
         # labels.add_widget(self.rpm_sub_label)
@@ -96,9 +108,9 @@ class TestScreen(BoxLayout):
     def refresh(self, dt):
         state = self.analyser.get_most_recent()
 
-        speed = state["latestData"].get("0x0D")
+        # speed = state["latestData"].get("0x0D")
+        speed = state["speed"]
         rpm = state["rpm"]
-        accel = state["accel"]
         fuelCons = state["fuelCons"]
         throttle = state["latestData"].get("0x11")
         gear = state["gear"]
@@ -110,17 +122,21 @@ class TestScreen(BoxLayout):
             self.eventLabel.text = "Current Event: --"
 
         if speed:
-            self.speed_label.text = f"Speed: {speed['value']} {speed['unit']}"
+            self.speed_sub_label.text = (f"AvgROC: {(speed.metrics.wAvgROC):.2f} m/s^2\n"+
+                                       f"Avg: {speed.metrics.average:.2f} {speed.pid.unit}\n"+
+                                       f"Max: {speed.metrics.max:.2f} {speed.pid.unit}\n")
+            print(f"AvgROC: {(speed.metrics.wAvgROC):.2f} m/s^2\n")
+                                    #    f"Min: {speed.metrics.min:.2f} {speed.pid.unit}")
+            
+            self.speed_label.text = f"Speed: {int(speed.metrics.current)} {speed.pid.unit}"
+
         if rpm.metrics:
             self.rpm_sub_label.text = (f"AvgROC: {rpm.metrics.wAvgROC:.2f} {rpm.pid.unit}\n"+
-                                       f"InstROC: {rpm.metrics.instROC:.2f} {rpm.pid.unit}/s\n"+
                                        f"Avg: {rpm.metrics.average:.2f} {rpm.pid.unit}\n"+
                                        f"Max: {rpm.metrics.max:.2f} {rpm.pid.unit}\n"+
                                        f"Min: {rpm.metrics.min:.2f} {rpm.pid.unit}")
             
             self.rpm_label.text = f"RPM: {int(rpm.metrics.current)} {rpm.pid.unit}"
-        if accel:
-            self.accel_label.text = f"Accel: {accel:.2f} m/s^2"
         if fuelCons is not None:
             self.fuelCons_label.text = f"Fuel Cons: {fuelCons:.2f} l/km"
         if throttle:

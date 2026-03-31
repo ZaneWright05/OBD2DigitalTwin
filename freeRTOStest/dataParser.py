@@ -52,26 +52,6 @@ computedMetrics = {
     "acc" : computedMetric("acceleration", "m/s^2", PIDS["0x0D"], lambda window, pid: savgol_filter(window, pid))
 }
 
-def applySGFilter(window, pid):
-    # print(f"Applying SG filter to window: {window}")
-                    # self.timeWindow.append(time)
-
-    if len(window) == window.maxlen:
-        y = np.array(window, dtype=np.float64)            
-        delta = PIDS[pid].period_ms / 1000.0
-
-        dydt = savgol_filter(
-            y,
-            window_length=window.maxlen,
-            polyorder=2,
-            deriv=1,
-            delta=delta,
-            mode="interp" 
-            )
-        return float(dydt[-1])
-    else:
-        return None
-
 class Analyser:
     def __init__(self):
         self.lock = threading.Lock()
@@ -89,14 +69,13 @@ class Analyser:
         else:
             print("No historic metrics found for RPM.")
         self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=6000, lowThreshold=500, rocMin=0.5,window_size=15, historicMetrics=historicMetrics.get("0x0C"))
-        self.rpmMetric.parent = self
+        # self.rpmMetric.parent = self
+
+        self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=5, historicMetrics=historicMetrics.get("0x0D"), conversionFactor=3.6)
 
         self.lastEvent = None
         self.lastEventEndTime = 0
         self.displayTime = 2 # in seconds
-
-        self.currentAcc = None
-        self.currentAccRaw = None
         
         self.fuelCons = None
         
@@ -145,15 +124,9 @@ class Analyser:
                 rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
                 if rpm_data is not None and seq == rpm_seq and self.currentGear[1] != seq:
                     self.currentGear = (self.estimate_gear(value, rpm_data), seq)
-                time = seq * PIDS[pid].period_ms / 1000.0
-                speed_ms = value / 3.6
 
-                self.speedWindow.append(speed_ms)
-                    # self.timeWindow.append(time)
-                dydt = applySGFilter(self.speedWindow, pid)
-                
-                self.currentAcc = dydt
-                # self.currentSpeed = (value, seq)
+                self.speedMetric.add_data_point(seq, value)
+    
             if pid == "0x0C":
                 self.rpmMetric.add_data_point(seq, value)
                 speed_data, speed_seq = self.mostRecentValues.get("0x0D", (None, None))
@@ -238,8 +211,8 @@ class Analyser:
             return {
                 "latestData": latestData,
                 "rpm" : self.rpmMetric,
+                "speed": self.speedMetric,
                 "event": recentEvent,
-                "accel": self.currentAcc,
                 "fuelCons": self.fuelCons,  
                 "gear": self.currentGear[0],
                 "ratio": self.currentGRatio

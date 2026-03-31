@@ -1,6 +1,8 @@
 from helpers import pid
 from dataclasses import dataclass
 from collections import deque
+import numpy as np
+from scipy.signal import savgol_filter
 
 @dataclass
 class Metrics():
@@ -36,7 +38,7 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -50,6 +52,7 @@ class MetricAnalyser:
 
         self.global_sum = 0.0
 
+        self.conversionFactor = conversionFactor
 
         self.metrics = Metrics()
         self.events = []
@@ -108,18 +111,12 @@ class MetricAnalyser:
         self.window_sum += value
         self.global_sum += value
 
-        self.sliding_window.append((seq, value))
+        self.sliding_window.append((seq, value/ self.conversionFactor))
         self.metrics.window_Avg = self.window_sum / len(self.sliding_window) if self.sliding_window else 0.0
         self.metrics.average = self.global_sum / seq if seq != 0 else 0.0 # seq is a proxy for num of data points
 
         self.metrics.min = min(self.metrics.min, value) if self.metrics.min != float('inf') else value
         self.metrics.max = max(self.metrics.max, value) if self.metrics.max != float('-inf') else value
-
-        self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
-        self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
-
-        self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
-        self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
         
         self.metrics.current = value
 
@@ -127,16 +124,24 @@ class MetricAnalyser:
                 ## calc roc between last 2 points
                 (prev_seq, prev_val), (curr_seq, curr_val) = self.sliding_window[-2], self.sliding_window[-1]
                 seq_diff = (curr_seq - prev_seq) * self.pid.period_ms # convert to ms
+                # print(f"Calculating ROC: curr_val={curr_val}, prev_val={prev_val}, seq_diff={seq_diff}ms")
                 self.metrics.instROC = (curr_val - prev_val) / seq_diff if seq_diff != 0 else 0.0
 
-                # calc avg roc over window
-                first_seq, first_val = self.sliding_window[0]
-                total_seq_diff = (curr_seq - first_seq) * self.pid.period_ms
-                self.metrics.wAvgROC = (curr_val - first_val) / total_seq_diff if total_seq_diff != 0 else 0.0
-
+                # # calc avg roc over window
+                # first_seq, first_val = self.sliding_window[0]
+                # total_seq_diff = (curr_seq - first_seq) * self.pid.period_ms
+                # self.metrics.wAvgROC = (curr_val - first_val) / total_seq_diff if total_seq_diff != 0 else 0.0
         else:
             self.metrics.instROC = 0.0
             self.metrics.wAvgROC = 0.0
+
+        self.metrics.wAvgROC = self.applySGFilter()
+
+        self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
+        self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
+
+        self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
+        self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
 
         if self.highThreshold is not None:
             self.above_event(value, seq)
@@ -145,6 +150,25 @@ class MetricAnalyser:
         
         self.rapid_increase(seq)
         self.rapid_decrease(seq)
+
+    def applySGFilter(self):
+    # print(f"Applying SG filter to window: {window}")
+                    # self.timeWindow.append(time)
+        if len(self.sliding_window) == self.sliding_window.maxlen:
+            y = np.array([val for _, val in self.sliding_window], dtype=np.float64)
+            delta = self.pid.period_ms / 1000.0
+
+            dydt = savgol_filter(
+                y,
+                window_length=self.sliding_window.maxlen,
+                polyorder=2,
+                deriv=1,
+                delta=delta,
+                mode="interp" 
+                )
+            return float(dydt[-1])
+        else:
+            return 0.0
 
     def end_event(self, eventType, seq):
         if self.active_events.get(eventType):
@@ -179,21 +203,21 @@ class MetricAnalyser:
             )
 
     def rapid_decrease(self, seq):
-        roc = self.metrics.instROC
+        roc = self.metrics.wAvgROC
         if roc >= 0 or abs(roc) < self.rocMin:
             self.end_event("rapid_decrease", seq)
             return
         if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
-            bound = self.metrics.wAvgROC * 2 if self.metrics.wAvgROC < 0 else float('-inf')
+            bound = self.metrics.minWAvgROC * 1.2 if self.metrics.minWAvgROC < 0 else float('-inf')
             hist_min = bound
         else:
-            hist_min = self.historicMetrics.minInstROC if self.historicMetrics.minInstROC != float('inf') else -0.1
+            hist_min = self.historicMetrics.minWAvgROC if self.historicMetrics.minWAvgROC != float('inf') else -0.1
             bound = min(hist_min * 1.2, self.metrics.wAvgROC * 2)
 
         pri = None
         if roc < bound:
             pri = 2
-        elif roc < hist_min * 1.2:
+        elif roc < hist_min:
             pri = 1
         elif roc < self.metrics.wAvgROC * 1.5:
             pri = 0
@@ -204,22 +228,22 @@ class MetricAnalyser:
         self.handle_event(seq, "rapid_decrease", roc, pri)
 
     def rapid_increase(self, seq):
-        roc = self.metrics.instROC
+        roc = self.metrics.wAvgROC
         if roc <= 0 or abs(roc) < self.rocMin:
             self.end_event("rapid_increase", seq)
             return
         
         if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
-            bound = self.metrics.wAvgROC * 2 if self.metrics.wAvgROC > 0 else float('inf')
+            bound = self.metrics.maxWAvgROC * 2 if self.metrics.maxWAvgROC > 0 else float('inf')
             hist_max = bound
         else:
-            hist_max = self.historicMetrics.maxInstROC
+            hist_max = self.historicMetrics.maxWAvgROC
             bound = max(hist_max * 1.2, self.metrics.wAvgROC * 2)
 
         pri = None
         if roc > bound:
             pri = 2
-        elif roc > hist_max * 1.2:
+        elif roc > hist_max:
             pri = 1
         elif roc > self.metrics.wAvgROC * 1.5:
             pri = 0
