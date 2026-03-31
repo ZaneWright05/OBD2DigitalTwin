@@ -110,6 +110,9 @@ class TopBar(Widget):
 class RealTimeScreen(FloatLayout):
     def __init__(self, analyser, **var_args):
         super().__init__(**var_args)
+        self.size_hint = (None, None)
+        self.size = Window.size
+        Window.bind(size=self._update_root_size)
         with self.canvas.before:
             Color(179/255, 179/255, 179/255, 1)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
@@ -176,6 +179,9 @@ class RealTimeScreen(FloatLayout):
         
         self.analyser = analyser 
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
+        
+    def _update_root_size(self, instance, size):
+        self.size = size
 
     def _update_bg_rect(self, *args):
         self.bg_rect.pos = (0,0)
