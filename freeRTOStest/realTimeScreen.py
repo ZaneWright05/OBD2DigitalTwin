@@ -185,7 +185,7 @@ import os
 Config.set('graphics', 'width', '800')
 Config.set('graphics', 'height', '480')
 Config.set('graphics', 'resizable', '0')
-Config.set('graphics', 'borderless', '1')
+Config.set('graphics', 'borderless', '1')  # set to 0 if Linux acts weird
 
 from kivy.core.window import Window
 from kivy.app import App
@@ -193,71 +193,89 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
+
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 
-class TopBar(Widget):
+
+class TopBar(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.size_hint = (None, None)
+
+        # Layout behavior
+        self.orientation = 'horizontal'
+        self.size_hint = (1, None)
         self.height = 50
-        self.width = Window.width
-        with self.canvas:
+        self.pos_hint = {'top': 1}  # stick to top
+
+        self.padding = (10, 0)   # left/right padding
+        self.spacing = 10        # space between images
+
+        # Background
+        with self.canvas.before:
             Color(1, 1, 1, 1)
-            self.rect = Rectangle(pos=(0, Window.height - self.height), size=(Window.width, self.height))
-        Window.bind(size=self.update_window_size)
-        self.update_window_size(Window, Window.size)
-        self.layout = BoxLayout(orientation='horizontal', size_hint=(1, 1), pos=(0, 0))
-        self.bind(pos=self.update_layout, size=self.update_layout)
-        self.update_layout()
-        self.add_widget(self.layout)
-        # self.update_window_size(Window, Window.size)
+            self.rect = Rectangle(pos=self.pos, size=self.size)
 
-    def update_layout(self, *args):
-        self.layout.size = self.size
-        self.layout.pos = self.pos
+        self.bind(pos=self.update_rect, size=self.update_rect)
 
-    def update_window_size(self, instance, size):
-        self.width = Window.width
-        self.pos = (0, Window.height - self.height)
-        self.size = (Window.width, self.height)
+        # Images
+        self.connectionImg = Image(
+            source=os.path.join(imgDir, "disconnected.png"),
+            size_hint=(None, None),
+            size=(50, 50)
+        )
+
+        self.signalImg = Image(
+            source=os.path.join(imgDir, "lowConnection.png"),
+            size_hint=(None, None),
+            size=(50, 50)
+        )
+
+        self.infoImg = Image(
+            source=os.path.join(imgDir, "info.png"),
+            size_hint=(None, None),
+            size=(50, 50)
+        )
+
+        # Add directly (no nested layout!)
+        self.add_widget(self.connectionImg)
+        self.add_widget(self.signalImg)
+        self.add_widget(self.infoImg)
+
+    def update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
 
-class RealTimeScreen(Widget):
+
+class RealTimeScreen(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.size_hint = (None, None)
-        self.size = Window.size
-        with self.canvas.before:
-            Color(0.7, 0.7, 0.7, 1)  # Light gray
-            self.bg_rect = Rectangle(pos=(0, 0), size=Window.size)
-        Window.bind(size=self.update_bg_rect)
-        Window.bind(size=self.update_root_size)
-        self.update_bg_rect(Window, Window.size)
-        self.update_root_size(Window, Window.size)
 
+        self.orientation = 'vertical'
+
+        # Background
+        with self.canvas.before:
+            Color(0.7, 0.7, 0.7, 1)
+            self.bg_rect = Rectangle(pos=self.pos, size=Window.size)
+
+        self.bind(size=self.update_bg_rect, pos=self.update_bg_rect)
+
+        # Top bar
         self.topbar = TopBar()
         self.add_widget(self.topbar)
 
-        self.connectionImg = Image(source=os.path.join(imgDir, "disconnected.png"), size_hint=(None, None), size=(50, 50))
-        self.topbar.layout.add_widget(self.connectionImg)
-        
-        self.signalImg = Image(source=os.path.join(imgDir, "lowConnection.png"), size_hint=(None, None), size=(50, 50))
-        self.topbar.layout.add_widget(self.signalImg)
-        
-        self.infoImg = Image(source=os.path.join(imgDir, "info.png"), size_hint=(None, None), size=(50, 50))
-        self.topbar.layout.add_widget(self.infoImg)
+        # Filler content (rest of screen)
+        self.content = Widget()
+        self.add_widget(self.content)
 
-    def update_bg_rect(self, instance, size):
-        self.bg_rect.size = size
-        self.bg_rect.pos = (0, 0)
+    def update_bg_rect(self, *args):
+        self.bg_rect.pos = self.pos
+        self.bg_rect.size = self.size
 
-    def update_root_size(self, instance, size):
-        self.size = size
 
 class MyApp(App):
     def build(self):
         return RealTimeScreen()
+
 
 if __name__ == "__main__":
     MyApp().run()
