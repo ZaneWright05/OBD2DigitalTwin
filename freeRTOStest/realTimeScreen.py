@@ -14,7 +14,7 @@ else:
 from kivy.core.window import Window
 if os.name != 'nt': 
     Window.show_cursor = False
-    
+
 from kivy.app import App
 from kivy.clock import Clock
 from threading import Thread
@@ -50,18 +50,47 @@ def convert_dimensions(width_mm, height_mm):
     height_px = int(height_mm * px_per_mm_y)
     return width_px, height_px
 
+# class TopBar(Widget):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.size_hint = (None, None)
+#         self.size = (800, 50)
+#         with self.canvas:
+#             Color(1, 1, 1, 1)  # White color
+#             self.rect = Rectangle(pos=self.pos, size=self.size)
+#             Color(0, 0, 0, 1)
+#             self.border = Line(rectangle=(self.x, self.y, self.width, self.height), width=1)
+#         self.bind(pos=self.update_rect, size=self.update_rect)
+
+#         self.layout = BoxLayout(orientation='horizontal', size_hint=(1, 1), pos=(0, 0))
+#         self.add_widget(self.layout)
+
+#     def update_rect(self, *args):
+#         self.rect.pos = self.pos
+#         self.rect.size = self.size
+#         self.border.rectangle = (self.x, self.y, self.width, self.height)
+#         self.layout.size = self.size
+#         self.layout.pos = self.pos
+
+def bind_widget_to_parent(widget, parent, pos_func):
+    def update_pos(*args):
+        widget.pos = pos_func(parent, widget)
+    parent.bind(size=update_pos)
+    update_pos()
+
 class TopBar(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
-        self.size = (800, 50)
+        self.height = 50
+        self.width = Window.width
         with self.canvas:
-            Color(1, 1, 1, 1)  # White color
+            Color(1, 1, 1, 1)
             self.rect = Rectangle(pos=self.pos, size=self.size)
             Color(0, 0, 0, 1)
             self.border = Line(rectangle=(self.x, self.y, self.width, self.height), width=1)
         self.bind(pos=self.update_rect, size=self.update_rect)
-
+        Window.bind(size=self.update_window_size)
         self.layout = BoxLayout(orientation='horizontal', size_hint=(1, 1), pos=(0, 0))
         self.add_widget(self.layout)
 
@@ -72,11 +101,10 @@ class TopBar(Widget):
         self.layout.size = self.size
         self.layout.pos = self.pos
 
-def bind_widget_to_parent(widget, parent, pos_func):
-    def update_pos(*args):
-        widget.pos = pos_func(parent, widget)
-    parent.bind(size=update_pos)
-    update_pos()
+    def update_window_size(self, instance, size):
+        self.width = Window.width
+        self.pos = (0, Window.height - self.height)
+        self.size = (Window.width, self.height)
 
 
 class RealTimeScreen(FloatLayout):
@@ -85,11 +113,13 @@ class RealTimeScreen(FloatLayout):
         with self.canvas.before:
             Color(179/255, 179/255, 179/255, 1)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
-            
+        Window.bind(size=self._update_bg_rect)
+        self._update_bg_rect(Window, Window.size)   
         self.bind(pos=self._update_bg_rect, size=self._update_bg_rect)
 
         self.topbar = TopBar()
         self.add_widget(self.topbar)
+        self.topbar.update_window_size(Window, Window.size)
         bind_widget_to_parent(self.topbar, self, lambda parent, widget: (0, parent.height - widget.height))
         
         self.connectionImg = Image(source=os.path.join(imgDir, "disconnected.png"), size_hint=(None, None), size=(50, 50))
@@ -144,7 +174,7 @@ class RealTimeScreen(FloatLayout):
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
 
     def _update_bg_rect(self, *args):
-        self.bg_rect.pos = self.pos
+        self.bg_rect.pos = (0,0)
         self.bg_rect.size = self.size
 
     def refresh(self, dt):
