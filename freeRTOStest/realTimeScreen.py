@@ -1,15 +1,15 @@
 from kivy.config import Config
 import os
 
-if os.name != 'nt': 
-    Config.set("graphics", "fullscreen", "auto")
-    Config.set("graphics", "resizable", "0")
-    Config.set("graphics", "borderless", "1")
-else:
-    Config.set('graphics', 'width', '800')
-    Config.set('graphics', 'height', '480')
-    Config.set('graphics', 'resizable', '0')
-    Config.set('graphics', 'borderless', '1')
+# if os.name != 'nt': 
+#     Config.set("graphics", "fullscreen", "auto")
+#     Config.set("graphics", "resizable", "0")
+#     Config.set("graphics", "borderless", "1")
+# else:
+Config.set('graphics', 'width', '800')
+Config.set('graphics', 'height', '480')
+Config.set('graphics', 'resizable', '0')
+Config.set('graphics', 'borderless', '1')
 
 from kivy.core.window import Window
 if os.name != 'nt': 
