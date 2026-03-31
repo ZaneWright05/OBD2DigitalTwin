@@ -2,7 +2,6 @@ from kivy.config import Config
 import os
 
 if os.name != 'nt': 
-    Window.show_cursor = False
     Config.set("graphics", "fullscreen", "auto")
     Config.set("graphics", "resizable", "0")
     Config.set("graphics", "borderless", "1")
@@ -13,6 +12,9 @@ else:
     Config.set('graphics', 'borderless', '1')
 
 from kivy.core.window import Window
+if os.name != 'nt': 
+    Window.show_cursor = False
+    
 from kivy.app import App
 from kivy.clock import Clock
 from threading import Thread
@@ -80,7 +82,6 @@ def bind_widget_to_parent(widget, parent, pos_func):
 class RealTimeScreen(FloatLayout):
     def __init__(self, analyser, **var_args):
         super().__init__(**var_args)
-
         with self.canvas.before:
             Color(179/255, 179/255, 179/255, 1)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
