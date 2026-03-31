@@ -169,7 +169,11 @@ class RealTimeScreen(FloatLayout):
         # gearBox.add_widget(self.estGRatioLabel)
         # gearBox.add_widget(gears)
 
-
+        print("Window.size:", Window.size)
+        print("FloatLayout.size:", self.size)
+        print("TopBar.size:", self.topbar.size)
+        print("TopBar.pos:", self.topbar.pos)
+        
         self.analyser = analyser 
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
 
