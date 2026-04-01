@@ -17,6 +17,7 @@ if os.name != 'nt':
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle, Line, RoundedRectangle
+from kivy.graphics import PushMatrix, PopMatrix, Rotate
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.clock import Clock
@@ -151,25 +152,32 @@ class TopBar(BoxLayout):
             size_hint=(None, None),          # important: not (None, 1)
             pos_hint={"center_y": 0.5},
             color=(1, 1, 1, 1),
-            font_size=17,
+            font_size=16,
             halign="left",
-            valign="middle"
+            valign="middle",
+            shorten=True,
+            shorten_from="right",
+            max_lines=1
         )
 
+        # self.eventLabel.shorten = True
+        # self.eventLabel.shorten_from = "right"
+        # self.eventLabel.max_lines = 1
+
         with self.eventLabel.canvas.before:
-            Color(0.45, 0.45, 0.45, 0.9)
+            Color(142/255, 140/255, 140/255, 1)
             self.eventBg = RoundedRectangle(
                 pos=self.eventLabel.pos,
                 size=self.eventLabel.size,
                 radius=[8, 8, 8, 8]
             )
 
-        self.eventLabel.bind(texture_size=self.update_event_pill)
-
-        self.eventLabel.bind(pos=self.update_event_bg, size=self.update_event_bg)
+        self.eventLabel.bind(text=self.update_event_pill, pos=self.update_event_bg, size=self.update_event_bg)
+        self.bind(height=self.update_event_pill)
 
         self.update_event_pill()
         self.update_event_bg()
+
 
 
         self.add_widget(self.leftImgs)
@@ -184,13 +192,92 @@ class TopBar(BoxLayout):
         self.border.rectangle = (self.x, self.y, self.width, self.height)
 
     def update_event_pill(self, *args):
-        tw, th = self.eventLabel.texture_size
-        self.eventLabel.size = (tw + 20, min(self.height - 6, th + 10))
+        fixed_w = 340
+        h = self.height - 6
+        if self.eventLabel.size != (fixed_w, h):
+            self.eventLabel.size = (fixed_w, h)
+        self.eventLabel.text_size = (fixed_w - 20, h)
 
     def update_event_bg(self, *args):
         self.eventBg.pos = self.eventLabel.pos
         self.eventBg.size = self.eventLabel.size
 
+class Tachometer(Widget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (None, None)
+        self.size = (250, 250)
+
+        self.min = 0
+        self.max = 7000
+
+        self.displayedValue = 0
+        self.targetValue = 0
+
+        self.needleMin = 0
+        self.needleMax = 90
+
+        self.dial = Image(
+            source=os.path.join(imgDir, "tachometer.png"),
+            size_hint=(None, None),
+            size=(250, 250),
+            pos=self.pos
+        )
+        self.add_widget(self.dial)
+
+        self.needle = Image(
+            source=os.path.join(imgDir, "needleLong.png"),
+            size_hint=(None, None),
+            size=(254,6),
+            pos=self.pos
+        )
+
+        # self.needle.pos = (
+        #     self.dial.right - self.needle.width,
+        #     self.dial.y
+        # )
+
+        with self.needle.canvas.before:
+            PushMatrix()
+            self.needle_rot = Rotate(angle=0, origin=(0, 0))
+        with self.needle.canvas.after:
+            PopMatrix()
+
+        self.add_widget(self.needle)
+
+        self.bind(pos=self._sync_visuals, size=self._sync_visuals)
+        self._sync_visuals()
+
+        Clock.schedule_interval(self._tick, 0.05)
+
+    def _sync_visuals(self, *args):
+        self.dial.pos = self.pos
+        self.dial.size = (250, 250)
+
+        dial_right = self.dial.x + self.dial.width
+        dial_bottom = self.dial.y
+        self.needle.pos = (
+            dial_right - self.needle.width,
+            dial_bottom
+        )
+        self.needle_rot.origin = (dial_right, dial_bottom)
+
+    def set_target_rpm(self, rpm):
+        try:
+            rpm = float(rpm)
+        except Exception:
+            rpm = 0.0
+        self.targetValue = max(self.min, min(self.max, rpm))
+
+    def _tick(self, dt):
+        alpha = 0.35
+        self.displayedValue += (self.targetValue - self.displayedValue) * alpha
+        self._apply_angle(self.displayedValue)
+
+    def _apply_angle(self, rpm):
+        n = (rpm - self.min) / (self.max - self.min)
+        n = max(0.0, min(1.0, n))
+        self.needle_rot.angle = -(self.needleMin + n * (self.needleMax - self.needleMin))
 
 class RealTimeScreen(BoxLayout):
     def __init__(self, analyser, **kwargs):
@@ -214,6 +301,7 @@ class RealTimeScreen(BoxLayout):
         self.estGearLabel = Label(text="Gear: -", size_hint=(1, 0.1),
                                    color=(0, 0, 0, 1), 
                                    font_size=18)
+        
         gears = GridLayout(cols=2, size_hint=(1, 0.6), spacing=8, padding=8)
         for i in range(1, 7):
             btn = Button(text=f"{i}",
@@ -223,19 +311,30 @@ class RealTimeScreen(BoxLayout):
             background_normal='', background_color=(1, 1, 1, 1))
 
             btn.bind(on_press=lambda instance, x=i: analyser.store_gear(int(x)))
+            # btn.bind(on_press=lambda instance, x=i: self.set_event_text(f"Manually set gear to {x}"))
             gears.add_widget(btn)
 
         gearBox.add_widget(self.estGearLabel)
         gearBox.add_widget(gears)
 
+        self.tach = Tachometer()
+        self.tach.pos = (20, 20)
+        self.content.add_widget(self.tach)
 
         self.content.add_widget(gearBox)
         self.add_widget(self.content)
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
 
+    def set_event_text(self, msg):
+        self.topbar.eventLabel.text = msg
+
+    counter = -600
     def refresh(self, dt):
         state = self.analyser.get_most_recent()
-        
+        if self.counter > 7000:
+            self.counter = -600
+        self.counter += 200
+        self.tach.set_target_rpm(self.counter)
 
 
     def update_bg_rect(self, *args):
