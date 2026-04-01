@@ -182,6 +182,9 @@
 from kivy.config import Config
 import os
 
+if os.name != 'nt': 
+    os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'  # Force software rendering on Linux
+
 Config.set('graphics', 'width', '800')
 Config.set('graphics', 'height', '480')
 Config.set('graphics', 'resizable', '0')
@@ -236,7 +239,6 @@ class TopBar(BoxLayout):
             size=(50, 50)
         )
 
-        # Add directly (no nested layout!)
         self.add_widget(self.connectionImg)
         self.add_widget(self.signalImg)
         self.add_widget(self.infoImg)
