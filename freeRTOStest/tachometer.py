@@ -70,7 +70,7 @@ class Tachometer(Widget):
         self.bind(pos=self._sync_visuals, size=self._sync_visuals)
         self._sync_visuals()
 
-        Clock.schedule_interval(self._tick, 1.0/40.0)
+        Clock.schedule_interval(self._tick, 1.0/20.0)
 
     def _sync_visuals(self, *args):
         self.dial.pos = self.pos
@@ -104,7 +104,7 @@ class Tachometer(Widget):
         self.targetValue = max(self.min, min(self.max, rpm))
 
     def _tick(self, dt):
-        alpha = 0.35
+        alpha = 0.45
         self.displayedValue += (self.targetValue - self.displayedValue) * alpha
         self._apply_angle(self.displayedValue)
 

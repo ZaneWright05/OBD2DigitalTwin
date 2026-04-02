@@ -58,12 +58,12 @@ class MetricWidget(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'horizontal'
         self.size_hint = (None, 1)
-        self.spacing = 4
+        self.spacing = 12
         self.bind(minimum_width=self.setter('width'))
         self.image = Image(
             source=os.path.join(imgDir, imageName),
             size_hint=(None, 1),
-            size=(50, 50),
+            size=(40, 40),
             fit_mode='contain'
         )
 
@@ -72,7 +72,7 @@ class MetricWidget(BoxLayout):
             size_hint=(None, 1),
             width=100,
             color=(0, 0, 0, 1),
-            font_size=18,
+            font_size=20,
             halign='left',
             valign='middle'
         )
@@ -122,8 +122,21 @@ class RealTimeScreen(BoxLayout):
         self.tach.pos = (20, 220)
         self.content.add_widget(self.tach)
 
-        metricBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(200, 100))
-        metricBox.pos = (300,200)
+        metricBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(170, 140))
+        metricBox.pos = (315,200)
+        with metricBox.canvas.before:
+            Color(1, 1, 1, 1)  # White background
+            self.metricBox_bg = RoundedRectangle(
+                size=(metricBox.width + 10, metricBox.height + 10),
+                pos=(metricBox.x - 5, metricBox.y - 5),
+                radius=[10]
+            )
+            Color(0, 0, 0, 1)  # Black border
+            Line(
+                rounded_rectangle=(self.metricBox_bg.pos[0], self.metricBox_bg.pos[1], self.metricBox_bg.size[0], self.metricBox_bg.size[1], 10),
+                width=1.5
+            )
+
         self.accMet = MetricWidget("acceleration.png", "-- m/s²")
         metricBox.add_widget(self.accMet)
         self.voltMet = MetricWidget("voltage.png", "-- V")
@@ -131,7 +144,8 @@ class RealTimeScreen(BoxLayout):
         self.tempMet = MetricWidget("temperature.png", "-- °C")
         metricBox.add_widget(self.tempMet)
 
-        self.speedLabel = Label(text="-- km/h", pos=(300, 300), size_hint=(None, None), color=(0, 0, 0, 1), font_size=18)
+        self.speedLabel = Label(text="-- km/h", size_hint=(None, None), color=(0, 0, 0, 1), font_size=32)
+        self.speedLabel.pos = (400 - self.speedLabel.width / 2, 340)
         self.content.add_widget(self.speedLabel)
 
         self.content.add_widget(metricBox)
