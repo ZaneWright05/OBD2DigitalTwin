@@ -107,7 +107,6 @@ class TestScreen(BoxLayout):
 
     def refresh(self, dt):
         state = self.analyser.get_most_recent()
-
         # speed = state["latestData"].get("0x0D")
         speed = state["speed"]
         rpm = state["rpm"]

@@ -223,10 +223,31 @@ class Tachometer(Widget):
             size=(250, 250),
             pos=self.pos
         )
+        
+        minLabel = Label(text=str(self.min), pos=(self.x,self.y -22.5), size_hint=(None, None), color=(0, 0, 0, 1))
+        maxLabel = Label(text=str(self.max), pos=(self.dial.width - 10, self.dial.height - 40), size_hint=(None, None), color=(0, 0, 0, 1))
+
+        # self.rpmBox = Widget(size_hint=(None, None), size=(90, 36))
+        # with self.rpmBox.canvas.before:
+        #     Color(0.7, 0.7, 0.7, 1)
+        #     self.rpmRect = RoundedRectangle(pos=self.rpmBox.pos, size=self.rpmBox.size, radius=[6, 6, 6, 6])
+
+        self.rpmLabel = Label(
+            text="0 RPM",
+            size_hint=(None, None),
+            font_size=28,
+            color=(0, 0, 0, 1),
+            halign="center",
+            valign="middle"
+        )
+        self.rpmLabel.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+
         self.add_widget(self.dial)
 
+        self.add_widget(minLabel)
+        self.add_widget(maxLabel)
         self.needle = Image(
-            source=os.path.join(imgDir, "needleLong.png"),
+            source=os.path.join(imgDir, "needleLong2Col.png"),
             size_hint=(None, None),
             size=(254,6),
             pos=self.pos
@@ -245,10 +266,13 @@ class Tachometer(Widget):
 
         self.add_widget(self.needle)
 
+        # self.add_widget(self.rpmBox)
+        self.add_widget(self.rpmLabel)
+
         self.bind(pos=self._sync_visuals, size=self._sync_visuals)
         self._sync_visuals()
 
-        Clock.schedule_interval(self._tick, 0.05)
+        Clock.schedule_interval(self._tick, 1.0/40.0)
 
     def _sync_visuals(self, *args):
         self.dial.pos = self.pos
@@ -261,6 +285,21 @@ class Tachometer(Widget):
             dial_bottom
         )
         self.needle_rot.origin = (dial_right, dial_bottom)
+
+        dial_center_x = self.dial.x + self.dial.width / 2
+        dial_center_y = self.dial.y + self.dial.height / 2
+
+        # self.rpmBox.pos = (
+        #     dial_center_x - self.rpmBox.width / 2,
+        #     dial_center_y - self.rpmBox.height / 2
+        # )
+        # self.rpmRect.pos = self.rpmBox.pos
+        # self.rpmRect.size = self.rpmBox.size
+
+        self.rpmLabel.pos = (dial_center_x, dial_center_y - self.rpmLabel.height / 2)
+
+
+       
 
     def set_target_rpm(self, rpm):
         try:
@@ -321,6 +360,9 @@ class RealTimeScreen(BoxLayout):
         self.tach.pos = (20, 20)
         self.content.add_widget(self.tach)
 
+        self.speedLabel = Label(text="-- km/h", pos=(300, 300), size_hint=(None, None), color=(0, 0, 0, 1), font_size=18)
+        self.content.add_widget(self.speedLabel)
+
         self.content.add_widget(gearBox)
         self.add_widget(self.content)
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
@@ -328,13 +370,19 @@ class RealTimeScreen(BoxLayout):
     def set_event_text(self, msg):
         self.topbar.eventLabel.text = msg
 
-    counter = -600
     def refresh(self, dt):
         state = self.analyser.get_most_recent()
-        if self.counter > 7000:
-            self.counter = -600
-        self.counter += 200
-        self.tach.set_target_rpm(self.counter)
+        if state is None:
+            return
+        self.topbar.timeLabel.text = state["time"]
+        self.topbar.distLabel.text = f"{state['distance']} km"
+
+        speed = state["speed"].metrics.current if state["speed"].metrics else None
+        self.speedLabel.text = f"{int(speed) if speed is not None else '--'} km/h"
+
+        rpm = state["rpm"].metrics.current if state["rpm"].metrics else None
+        self.tach.set_target_rpm(rpm)
+        self.tach.rpmLabel.text = f"{int(rpm) if rpm is not None else '0'} RPM"
 
 
     def update_bg_rect(self, *args):
@@ -345,8 +393,8 @@ class RealTimeScreen(BoxLayout):
 class MyApp(App):
     def build(self):
         self.analyser = Analyser()
-        self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        # self.worker = Thread(target=read_csv, args=("", self.analyser, 16), daemon=True)
+        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 128), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 

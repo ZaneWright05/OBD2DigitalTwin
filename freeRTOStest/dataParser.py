@@ -57,8 +57,11 @@ class Analyser:
         self.lock = threading.Lock()
         self.pidValues = defaultdict(list)
         self.mostRecentValues = {}
-        self.currentSpeed = None
         
+        self.connected = False
+        self.connectionStartTime = None # for the timer
+        self.distanceTravelled_km = 0.0
+
         if os.path.exists("historicMetrics.joblib"):
             historicMetrics = joblib.load("historicMetrics.joblib")
         else:
@@ -124,8 +127,12 @@ class Analyser:
                 rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
                 if rpm_data is not None and seq == rpm_seq and self.currentGear[1] != seq:
                     self.currentGear = (self.estimate_gear(value, rpm_data), seq)
-
+                prevSpeed = self.speedMetric.metrics.current if self.speedMetric.metrics else None
                 self.speedMetric.add_data_point(seq, value)
+                if prevSpeed is not None:
+                    timeDiff = PIDS[pid].period_ms / 1000.0
+                    averageSpeed = (prevSpeed + value) / 2
+                    self.distanceTravelled_km += (averageSpeed * timeDiff) / 3600.0
     
             if pid == "0x0C":
                 self.rpmMetric.add_data_point(seq, value)
@@ -183,7 +190,16 @@ class Analyser:
             self.gearEstimator.add_data_point(rpm, speed, gear)
 
     def get_most_recent(self):
+        if not self.connected:
+            return None
         with self.lock:
+            if self.connectionStartTime is None:
+                self.connectionStartTime = time.monotonic()
+            elapsedTime_s = time.monotonic() - self.connectionStartTime  
+            hours = int(elapsedTime_s // 3600)
+            minutes = int((elapsedTime_s % 3600) // 60)
+            seconds = int(elapsedTime_s % 60)
+            time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             latestData = {
                 pid: {"value": value, "unit": PIDS[pid].unit}
                 for pid, (value, seq) in self.mostRecentValues.items()
@@ -209,6 +225,8 @@ class Analyser:
                     self.lastEvent = None
                     self.lastEventEndTime = 0
             return {
+                "time": time_str,
+                "distance": f"{self.distanceTravelled_km:.2f}",
                 "latestData": latestData,
                 "rpm" : self.rpmMetric,
                 "speed": self.speedMetric,
@@ -237,10 +255,9 @@ def find_connected_port():
     return None
 
 def read_from_com(store):
-    notConnected = True
     print("Attempting to connect to serial port...")
 
-    while notConnected:
+    while not store.connected:
         port = find_connected_port()
         # port = "COM4"
         if port is None:
@@ -249,7 +266,7 @@ def read_from_com(store):
         else:
             ser = serial.Serial(port, 115200)
             print(f"Connected to serial port: {port}")
-            notConnected = False
+            store.connected = True
         # try:
         #     ser = serial.Serial('COM4', 115200)
         #     print("Connected to serial port.")
@@ -283,7 +300,7 @@ def read_from_com(store):
 
 def read_csv(path, store, sample_rate=16):
     delay = 1.0 / sample_rate
-
+    store.connected = True
     with open('data_log_4.csv', 'r') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
