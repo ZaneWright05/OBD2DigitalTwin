@@ -17,7 +17,6 @@ if os.name != 'nt':
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle, Line, RoundedRectangle
-from kivy.graphics import PushMatrix, PopMatrix, Rotate
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.clock import Clock
@@ -27,6 +26,8 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
+from tachometer import Tachometer
+from topbar import TopBar
 from dataParser import Analyser, read_csv, read_from_com
 
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
@@ -52,271 +53,32 @@ def bind_widget_to_parent(widget, parent, pos_func):
     parent.bind(size=update_pos)
     update_pos()
 
-class TopBar(BoxLayout):
-    def __init__(self, **kwargs):
+class MetricWidget(BoxLayout):
+    def __init__(self, imageName, label_text, **kwargs):
         super().__init__(**kwargs)
-
         self.orientation = 'horizontal'
-        self.size_hint = (1, None)
-        self.height = 50
-        self.pos_hint = {'top': 1}
-        self.padding = (10, 0, 0, 0)
-        self.spacing = 8
-
-        with self.canvas.before:
-            Color(1, 1, 1, 1)
-            self.rect = Rectangle(pos=self.pos, size=self.size)
-
-        with self.canvas.after:
-            Color(0, 0, 0, 1)
-            self.border = Line(rectangle=(self.x, self.y, self.width, self.height), width=1)
-
-        self.bind(pos=self.update_rect, size=self.update_rect)
-
-        self.leftImgs = BoxLayout(
-            orientation='horizontal',
-            size_hint=(None, 1),
-            spacing=8
-        )
-        self.leftImgs.bind(minimum_width=self.leftImgs.setter('width'))
-
-        self.connectionImg = Image(
-            source=os.path.join(imgDir, "disconnected.png"),
-            size_hint=(None, None),
-            size=(50, 50)
-        )
-        self.signalImg = Image(
-            source=os.path.join(imgDir, "lowConnection.png"),
-            size_hint=(None, None),
-            size=(50, 50)
-        )
-        self.infoImg = Image(
-            source=os.path.join(imgDir, "info.png"),
-            size_hint=(None, None),
-            size=(50, 50)
-        )
-
-        self.leftImgs.add_widget(self.connectionImg)
-        self.leftImgs.add_widget(self.signalImg)
-        self.leftImgs.add_widget(self.infoImg)
-
-        self.rightContent = BoxLayout(
-            orientation='horizontal',
-            size_hint=(None, 1),
-            spacing=4
-        )
-        self.rightContent.bind(minimum_width=self.rightContent.setter('width'))
-
-        self.roadImg = Image(
-            source=os.path.join(imgDir, "road.png"),
+        self.size_hint = (None, 1)
+        self.spacing = 4
+        self.bind(minimum_width=self.setter('width'))
+        self.image = Image(
+            source=os.path.join(imgDir, imageName),
             size_hint=(None, 1),
             size=(50, 50),
             fit_mode='contain'
         )
-        self.timerImg = Image(
-            source=os.path.join(imgDir, "timer.png"),
-            size_hint=(None, 1),
-            size=(35, 35),
-            fit_mode='contain'
-        )
 
-        self.distLabel = Label(
-            text="00.00 km",
+        self.label = Label(
+            text=label_text,
             size_hint=(None, 1),
-            width=80,
+            width=100,
             color=(0, 0, 0, 1),
             font_size=18,
             halign='left',
             valign='middle'
         )
-        self.distLabel.bind(size=lambda w, _: setattr(w, 'text_size', w.size))
-
-        self.timeLabel = Label(
-            text="00:00:00",
-            size_hint=(None, 1),
-            width=80,
-            color=(0, 0, 0, 1),
-            font_size=18,
-            halign='left',
-            valign='middle'
-        )
-        self.timeLabel.bind(size=lambda w, _: setattr(w, 'text_size', w.size))
-
-        self.rightContent.add_widget(self.roadImg)
-        self.rightContent.add_widget(self.distLabel)
-        self.rightContent.add_widget(self.timerImg)
-        self.rightContent.add_widget(self.timeLabel)
-
-        self.eventLabel = Label(
-            text="[45:20] Temperature coolant spike detected",
-            size_hint=(None, None),          # important: not (None, 1)
-            pos_hint={"center_y": 0.5},
-            color=(1, 1, 1, 1),
-            font_size=16,
-            halign="left",
-            valign="middle",
-            shorten=True,
-            shorten_from="right",
-            max_lines=1
-        )
-
-        # self.eventLabel.shorten = True
-        # self.eventLabel.shorten_from = "right"
-        # self.eventLabel.max_lines = 1
-
-        with self.eventLabel.canvas.before:
-            Color(142/255, 140/255, 140/255, 1)
-            self.eventBg = RoundedRectangle(
-                pos=self.eventLabel.pos,
-                size=self.eventLabel.size,
-                radius=[8, 8, 8, 8]
-            )
-
-        self.eventLabel.bind(text=self.update_event_pill, pos=self.update_event_bg, size=self.update_event_bg)
-        self.bind(height=self.update_event_pill)
-
-        self.update_event_pill()
-        self.update_event_bg()
-
-
-
-        self.add_widget(self.leftImgs)
-        # self.add_widget(Widget(size_hint=(1, 1)))
-        self.add_widget(self.eventLabel)
-        self.add_widget(Widget(size_hint=(1, 1)))
-        self.add_widget(self.rightContent)
-
-    def update_rect(self, *args):
-        self.rect.pos = self.pos
-        self.rect.size = self.size
-        self.border.rectangle = (self.x, self.y, self.width, self.height)
-
-    def update_event_pill(self, *args):
-        fixed_w = 340
-        h = self.height - 6
-        if self.eventLabel.size != (fixed_w, h):
-            self.eventLabel.size = (fixed_w, h)
-        self.eventLabel.text_size = (fixed_w - 20, h)
-
-    def update_event_bg(self, *args):
-        self.eventBg.pos = self.eventLabel.pos
-        self.eventBg.size = self.eventLabel.size
-
-class Tachometer(Widget):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.size_hint = (None, None)
-        self.size = (250, 250)
-
-        self.min = 0
-        self.max = 7000
-
-        self.displayedValue = 0
-        self.targetValue = 0
-
-        self.needleMin = 0
-        self.needleMax = 90
-
-        self.dial = Image(
-            source=os.path.join(imgDir, "tachometer.png"),
-            size_hint=(None, None),
-            size=(250, 250),
-            pos=self.pos
-        )
-        
-        minLabel = Label(text=str(self.min), pos=(self.x,self.y -22.5), size_hint=(None, None), color=(0, 0, 0, 1))
-        maxLabel = Label(text=str(self.max), pos=(self.dial.width - 10, self.dial.height - 40), size_hint=(None, None), color=(0, 0, 0, 1))
-
-        # self.rpmBox = Widget(size_hint=(None, None), size=(90, 36))
-        # with self.rpmBox.canvas.before:
-        #     Color(0.7, 0.7, 0.7, 1)
-        #     self.rpmRect = RoundedRectangle(pos=self.rpmBox.pos, size=self.rpmBox.size, radius=[6, 6, 6, 6])
-
-        self.rpmLabel = Label(
-            text="0 RPM",
-            size_hint=(None, None),
-            font_size=28,
-            color=(0, 0, 0, 1),
-            halign="center",
-            valign="middle"
-        )
-        self.rpmLabel.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
-
-        self.add_widget(self.dial)
-
-        self.add_widget(minLabel)
-        self.add_widget(maxLabel)
-        self.needle = Image(
-            source=os.path.join(imgDir, "needleLong2Col.png"),
-            size_hint=(None, None),
-            size=(254,6),
-            pos=self.pos
-        )
-
-        # self.needle.pos = (
-        #     self.dial.right - self.needle.width,
-        #     self.dial.y
-        # )
-
-        with self.needle.canvas.before:
-            PushMatrix()
-            self.needle_rot = Rotate(angle=0, origin=(0, 0))
-        with self.needle.canvas.after:
-            PopMatrix()
-
-        self.add_widget(self.needle)
-
-        # self.add_widget(self.rpmBox)
-        self.add_widget(self.rpmLabel)
-
-        self.bind(pos=self._sync_visuals, size=self._sync_visuals)
-        self._sync_visuals()
-
-        Clock.schedule_interval(self._tick, 1.0/40.0)
-
-    def _sync_visuals(self, *args):
-        self.dial.pos = self.pos
-        self.dial.size = (250, 250)
-
-        dial_right = self.dial.x + self.dial.width
-        dial_bottom = self.dial.y
-        self.needle.pos = (
-            dial_right - self.needle.width,
-            dial_bottom
-        )
-        self.needle_rot.origin = (dial_right, dial_bottom)
-
-        dial_center_x = self.dial.x + self.dial.width / 2
-        dial_center_y = self.dial.y + self.dial.height / 2
-
-        # self.rpmBox.pos = (
-        #     dial_center_x - self.rpmBox.width / 2,
-        #     dial_center_y - self.rpmBox.height / 2
-        # )
-        # self.rpmRect.pos = self.rpmBox.pos
-        # self.rpmRect.size = self.rpmBox.size
-
-        self.rpmLabel.pos = (dial_center_x, dial_center_y - self.rpmLabel.height / 2)
-
-
-       
-
-    def set_target_rpm(self, rpm):
-        try:
-            rpm = float(rpm)
-        except Exception:
-            rpm = 0.0
-        self.targetValue = max(self.min, min(self.max, rpm))
-
-    def _tick(self, dt):
-        alpha = 0.35
-        self.displayedValue += (self.targetValue - self.displayedValue) * alpha
-        self._apply_angle(self.displayedValue)
-
-    def _apply_angle(self, rpm):
-        n = (rpm - self.min) / (self.max - self.min)
-        n = max(0.0, min(1.0, n))
-        self.needle_rot.angle = -(self.needleMin + n * (self.needleMax - self.needleMin))
+        self.label.bind(size=lambda w, _: setattr(w, 'text_size', w.size))
+        self.add_widget(self.image)
+        self.add_widget(self.label)
 
 class RealTimeScreen(BoxLayout):
     def __init__(self, analyser, **kwargs):
@@ -356,13 +118,23 @@ class RealTimeScreen(BoxLayout):
         gearBox.add_widget(self.estGearLabel)
         gearBox.add_widget(gears)
 
-        self.tach = Tachometer()
-        self.tach.pos = (20, 20)
+        self.tach = Tachometer(200)
+        self.tach.pos = (20, 220)
         self.content.add_widget(self.tach)
+
+        metricBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(200, 100))
+        metricBox.pos = (300,200)
+        self.accMet = MetricWidget("acceleration.png", "-- m/s²")
+        metricBox.add_widget(self.accMet)
+        self.voltMet = MetricWidget("voltage.png", "-- V")
+        metricBox.add_widget(self.voltMet)
+        self.tempMet = MetricWidget("temperature.png", "-- °C")
+        metricBox.add_widget(self.tempMet)
 
         self.speedLabel = Label(text="-- km/h", pos=(300, 300), size_hint=(None, None), color=(0, 0, 0, 1), font_size=18)
         self.content.add_widget(self.speedLabel)
 
+        self.content.add_widget(metricBox)
         self.content.add_widget(gearBox)
         self.add_widget(self.content)
         Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
@@ -377,13 +149,25 @@ class RealTimeScreen(BoxLayout):
         self.topbar.timeLabel.text = state["time"]
         self.topbar.distLabel.text = f"{state['distance']} km"
 
-        speed = state["speed"].metrics.current if state["speed"].metrics else None
-        self.speedLabel.text = f"{int(speed) if speed is not None else '--'} km/h"
+        speed = state["speed"].metrics if state["speed"].metrics else None
+        self.speedLabel.text = f"{int(speed.current) if speed is not None else '--'} km/h"
+        accStr = " 0.00 m/s²"
+        if speed and speed.wAvgROC is not None:
+            if(speed.wAvgROC) >= 0:
+                accStr = f" {speed.wAvgROC:.2f} m/s²"
+            else:
+                accStr = f"{speed.wAvgROC:.2f} m/s²"
+        self.accMet.label.text = accStr
 
         rpm = state["rpm"].metrics.current if state["rpm"].metrics else None
         self.tach.set_target_rpm(rpm)
         self.tach.rpmLabel.text = f"{int(rpm) if rpm is not None else '0'} RPM"
 
+        volt = state["latestData"].get("0x42")
+        self.voltMet.label.text = f"{volt['value']:.2f} V" if volt is not None else "-- V"
+
+        temp = state["latestData"].get("0x05")
+        self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
 
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
@@ -394,7 +178,7 @@ class MyApp(App):
     def build(self):
         self.analyser = Analyser()
         # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 128), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 16), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 
