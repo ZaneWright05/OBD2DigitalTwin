@@ -11,7 +11,7 @@
 //#include "class/cdc/cdc_device.h"
 
 #define RPM_VEH_SPEED_PERIOD_MS 333
-#define THRTL_INTK_PERIOD_MS 500
+#define THRTL_INTK_LOAD_PERIOD_MS 500
 #define MAF_CTRL_VOLT_PERIOD_MS 1000
 #define COOLNT_FUEL_PRESS_PERIOD_MS 2000
 #define RUNTIME_SINCE_ENG_START_PERIOD_MS 4000
@@ -277,9 +277,9 @@ void rpm_veh_task(void *params)
     }
 }
 
-void thrttl_intk_task(void *params)
+void thrttl_intk_load_task(void *params)
 {
-    const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_INTK_PERIOD_MS); // task period 5s
+    const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_INTK_LOAD_PERIOD_MS); // task period 5s
     const uint task_PIN = 15;
 
     uint32_t seqNum = 0;
@@ -377,7 +377,7 @@ int main()
                 RPM_VEH_SPEED_stack,
             &RPM_VEH_SPEED_task_p);
 
-    xTaskCreateStatic(thrttl_intk_task,
+    xTaskCreateStatic(thrttl_intk_load_task,
                 "Throttle & Intake Task",
                 256,
                 NULL,

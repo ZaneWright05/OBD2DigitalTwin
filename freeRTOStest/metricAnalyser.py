@@ -38,7 +38,7 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: bool = True):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -51,6 +51,7 @@ class MetricAnalyser:
         self.window_sum = 0.0 # running sum for average calculation
 
         self.global_sum = 0.0
+        self.global_count = 0
 
         self.conversionFactor = conversionFactor
 
@@ -58,6 +59,7 @@ class MetricAnalyser:
         self.events = []
 
         self.active_events = {}
+        self.eventsTracked = eventsTracked
 
     def update_HistoricMetrics(self):
         if self.historicMetrics is None:
@@ -100,8 +102,23 @@ class MetricAnalyser:
             self.historicMetrics.minWAvgROC = min(self.historicMetrics.minWAvgROC, self.metrics.minWAvgROC)
         return self.historicMetrics
 
+    def all_trip_average(self):
+        if self.historicMetrics and self.historicMetrics.tripCount > 0:
+            if(self.metrics.average == 0): # if no current data, return historic average
+                return self.historicMetrics.average
+            else:
+                return (self.metrics.average + ( self.historicMetrics.average *  self.historicMetrics.tripCount)) / (1 + self.historicMetrics.tripCount)
+                # current ave * 1 + historic ave * trips / 1 + trip count - average over all trips
+        elif (self.metrics.average != 0):
+            return self.metrics.average
+        return 0.0
+
 
     def add_data_point(self, seq, value):
+        if value is None:
+            self.metrics.current = 0.00 # mark to the UI but dont store for calcs, none is is no data not the value 0
+            return
+
         self.data.append((seq, value))
 
         if(len(self.sliding_window) == self.window_size):
@@ -110,10 +127,11 @@ class MetricAnalyser:
         
         self.window_sum += value
         self.global_sum += value
+        self.global_count += 1
 
         self.sliding_window.append((seq, value/ self.conversionFactor))
         self.metrics.window_Avg = self.window_sum / len(self.sliding_window) if self.sliding_window else 0.0
-        self.metrics.average = self.global_sum / seq if seq != 0 else 0.0 # seq is a proxy for num of data points
+        self.metrics.average = self.global_sum / self.global_count if self.global_count != 0 else 0.0 # seq is a proxy for num of data points
 
         self.metrics.min = min(self.metrics.min, value) if self.metrics.min != float('inf') else value
         self.metrics.max = max(self.metrics.max, value) if self.metrics.max != float('-inf') else value
@@ -142,6 +160,9 @@ class MetricAnalyser:
 
         self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
         self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
+
+        if not self.eventsTracked:
+            return
 
         if self.highThreshold is not None:
             self.above_event(value, seq)

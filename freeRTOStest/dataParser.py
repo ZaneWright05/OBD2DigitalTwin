@@ -40,17 +40,52 @@ PIDS = {
     "0x1F": pid(2, "s", lambda a, b: (256 * a) + b,4000)
     }
 
-@dataclass(frozen=True)
-class computedMetric:
-    name: str
-    unit: str
-    parentPid: pid
-    func: callable
-    # timestamp_ms: int
 
-computedMetrics = {
-    "acc" : computedMetric("acceleration", "m/s^2", PIDS["0x0D"], lambda window, pid: savgol_filter(window, pid))
+FUELCONSPID = "0xFF"
+COMPUTEDPIDS = {
+    "0xFF" : pid(2, "l/100km", lambda speed, speedSeq, maf, mafSeq: calcInstFuelCons(speed, speedSeq, maf, mafSeq), max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
 }
+
+# @dataclass(frozen=True)
+# class computedMetric:
+#     name: str
+#     unit: str
+#     parentPid: pid
+#     func: callable
+#     # timestamp_ms: int
+
+# computedMetrics = {
+#     "acc" : computedMetric("acceleration", "m/s^2", PIDS["0x0D"], lambda window, pid: savgol_filter(window, pid))
+# }
+
+# ranges from https://caracaltech.com/articles/article/627981fe2fb15a8d9e50f99c
+# lambda afr/afrStoch (14.5 diesel), afr vals from link above
+def load_to_lambda(load):
+    if load < 100/3: # low load
+        lowRange = (6.9, 2.8)
+        pos = load / (100/3)
+        return lowRange[0] + pos * (lowRange[1] - lowRange[0])
+    elif load < 100 * (2/3): # medium load
+        medRange = (2.8, 1.7)
+        pos = (load - 100/3) / (100 * (2/3) - 100/3)
+        return medRange[0] + pos * (medRange[1] - medRange[0])
+    else: # highload
+        highRange = (1.7, 1.1)
+        pos = (load - (100 * (2/3))) / (100 - (100 * (2/3)))
+        return highRange[0] + pos * (highRange[1] - highRange[0])
+
+def calcInstFuelCons(speed, speedSeq, maf, mafSeq, load, loadSeq):
+    speedTime = speedSeq * PIDS["0x0D"].period_ms / 1000.0
+    mafTime = mafSeq * PIDS["0x10"].period_ms / 1000.0
+    loadTime = loadSeq * PIDS["0x04"].period_ms / 1000.0
+    valid = abs(speedTime - mafTime) < 0.5 and abs(speedTime - loadTime) < 0.5 and abs(mafTime - loadTime) < 0.5
+    if valid and speed != 0: # compare timestamps
+
+        ff = (maf * 3600) / (load_to_lambda(load) *14.5 * 820)
+        fCons = ff / speed
+        return (fCons * 100) # convert to l/100km
+    else:
+        return None
 
 class Analyser:
     def __init__(self):
@@ -76,8 +111,14 @@ class Analyser:
 
         self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=5, historicMetrics=historicMetrics.get("0x0D"), conversionFactor=3.6)
 
+        if FUELCONSPID in historicMetrics:
+            print(f"Loaded historic metrics for fuel consumption: {historicMetrics[FUELCONSPID]}")
+        else:
+            print("No historic metrics found for fuel cons")
+        self.fuelConsMetric = MetricAnalyser(COMPUTEDPIDS[FUELCONSPID], historicMetrics=historicMetrics.get(FUELCONSPID), eventsTracked = False)
+
         self.lastEvent = None
-        self.lastEventEndTime = 0
+        self.lastEventEndTime = 0 
         self.displayTime = 2 # in seconds
         
         self.fuelCons = None
@@ -93,10 +134,14 @@ class Analyser:
 
     def save_HistoricMetrics(self):
         # save historic metrics to file
+        if (time.monotonic() - self.connectionStartTime < 300):
+            print("Trip too short (< 5 minutes), not saving historic metrics...")
+            return
         joblib.dump({
-            "0x0C": self.rpmMetric.update_HistoricMetrics()
+            "0x0C": self.rpmMetric.update_HistoricMetrics(),
+            FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
         }, "historicMetrics.joblib")
-        print(f"{self.rpmMetric.historicMetrics}")
+        print(f"{self.rpmMetric.historicMetrics}\n{self.fuelConsMetric.historicMetrics}")
 
     def estimate_gear(self, speed, rpm):
         if(speed is None or rpm is None):
@@ -146,13 +191,8 @@ class Analyser:
     
             if pid == "0x10": # derive inst fuel cons
                 speed, speedSeq = self.mostRecentValues.get("0x0D")
-                speedTime = speedSeq * PIDS["0x0D"].period_ms / 1000.0
-                mafTime = seq * PIDS[pid].period_ms / 1000.0
-                if abs(speedTime - mafTime) < 0.5 and speed != 0: # compare timestamps
-                    ff = (value * 3600) / (14.5 * 720)
-                    fCons = ff / speed
-                    self.fuelCons = fCons
-                    # print(f"Instant fuel cons: {fCons:.2f} l/km")
+                load, loadSeq = self.mostRecentValues.get("0x04")
+                self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(speed, speedSeq, value, seq, load, loadSeq))
 
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
@@ -231,7 +271,7 @@ class Analyser:
                 "rpm" : self.rpmMetric,
                 "speed": self.speedMetric,
                 "event": recentEvent,
-                "fuelCons": self.fuelCons,  
+                "fuelCons": self.fuelConsMetric,  
                 "gear": self.currentGear[0],
                 "ratio": self.currentGRatio
             }

@@ -137,8 +137,8 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Initialize storage for temperature data
-temperature_by_seq = {}
+# Initialize storage for load data
+load_by_seq = {}
 
 # Read the CSV file
 sum = 0
@@ -149,23 +149,23 @@ with open("data_log_4.csv", "r", newline="") as f:
         data0 = int(row["Data0"], 16)
         seq = int(row["Seq"])
 
-        # Check for coolant temperature PID (0x05)
-        if pid == "0x05":
-            sum += data0 - 40
-            temperature_by_seq[seq] = data0 - 40  # Convert raw data to °C
+        # Check for load PID (0x04)
+        if pid == "0x04":
+            sum += data0/2.55
+            load_by_seq[seq] = data0/2.55  # Store raw load data
 
-print(f"Average Coolant Temperature: {sum / len(temperature_by_seq):.2f} °C")
+print(f"Average Load: {sum / len(load_by_seq):.2f} %")
 
 # Sort the data by sequence number
-sorted_seq = sorted(temperature_by_seq.keys())
-temperatures = [temperature_by_seq[seq] for seq in sorted_seq]
+sorted_seq = sorted(load_by_seq.keys())
+temperatures = [load_by_seq[seq] for seq in sorted_seq]
 
 # Plot the temperature over time
 plt.figure(figsize=(10, 6))
-plt.plot(sorted_seq, temperatures, label="Coolant Temperature (°C)", color="blue")
+plt.plot(sorted_seq, temperatures, label="Load (%)", color="blue")
 plt.xlabel("Sequence Number")
-plt.ylabel("Temperature (°C)")
-plt.title("Coolant Temperature Over Time")
+plt.ylabel("Load (%)")
+plt.title("Engine Load Over Time")
 plt.grid(alpha=0.3)
 plt.legend()
 plt.tight_layout()

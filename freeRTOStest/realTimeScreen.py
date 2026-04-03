@@ -125,16 +125,16 @@ class RealTimeScreen(BoxLayout):
         metricBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(170, 140))
         metricBox.pos = (315,200)
         with metricBox.canvas.before:
-            Color(1, 1, 1, 1)  # White background
+            Color(1, 1, 1, 1)
             self.metricBox_bg = RoundedRectangle(
                 size=(metricBox.width + 10, metricBox.height + 10),
                 pos=(metricBox.x - 5, metricBox.y - 5),
                 radius=[10]
             )
-            Color(0, 0, 0, 1)  # Black border
+            Color(0, 0, 0, 1)
             Line(
                 rounded_rectangle=(self.metricBox_bg.pos[0], self.metricBox_bg.pos[1], self.metricBox_bg.size[0], self.metricBox_bg.size[1], 10),
-                width=1.5
+                width=1
             )
 
         self.accMet = MetricWidget("acceleration.png", "-- m/s²")
@@ -150,8 +150,55 @@ class RealTimeScreen(BoxLayout):
 
         self.content.add_widget(metricBox)
         self.content.add_widget(gearBox)
+
+        fuelTitle = Label(text="Est. Fuel Cons", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
+        fuelTitle.pos=(Window.width/2 + fuelTitle.width/2.5, 165 - fuelTitle.height/2)
+
+        self.instConsLabel = Label(text="Inst: 0.00", size_hint=(None, None), color=(0, 0, 0, 1), font_size=24)
+        self.instConsLabel.pos=(Window.width/2 + 20, 125 - self.instConsLabel.height/2)
+        constUnitLabel = Label(text="L/100km", size_hint=(None, None), color=(0, 0, 0, 1), font_size=12)
+        constUnitLabel.pos=(self.instConsLabel.x + self.instConsLabel.width - 10, self.instConsLabel.y - 2.5)
+        
+        self.aveConsLabel = Label(text="Ave: 0.00", size_hint=(None, None), color=(0, 0, 0, 1), font_size=24)
+        self.aveConsLabel.pos=(Window.width/2 + 20, 85 - self.aveConsLabel.height/2)
+        constUnitLabel2 = Label(text="L/100km", size_hint=(None, None), color=(0, 0, 0, 1), font_size=12)
+        constUnitLabel2.pos=(self.aveConsLabel.x + self.aveConsLabel.width - 10, self.aveConsLabel.y - 2.5)
+
+        self.content.add_widget(fuelTitle)
+        self.content.add_widget(self.instConsLabel)
+        self.content.add_widget(constUnitLabel)
+        self.content.add_widget(self.aveConsLabel)
+        self.content.add_widget(constUnitLabel2)
+
+        driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
+        driverTitle.pos=(driverTitle.width/2.5, 165 - driverTitle.height/2)
+
+        self.content.add_widget(driverTitle)
+
+        button1 = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
+        button2 = Button(text="Driver Behavior", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
+        button3 = Button(text="Vehicle Health", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
+        button4 = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
+
+        for btn in [button1, button2, button3, button4]:
+            btn.background_normal = ''
+            btn.background_color = (1, 1, 1, 1)
+            btn.color = (0, 0, 0, 1)
+            self.content.add_widget(btn)
+
+        with self.content.canvas:
+            Color(0, 0, 0, 1)
+            Line(points=[0, 180, 3 * Window.width / 4, 180, 3 * Window.width / 4, 0], width=1)
+            Line(points=[Window.width/2, 180, Window.width/2, 0], width=1)
+            Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
+            Line(points=[Window.width, 0, 0, 0], width=1)
+            Line(points=[0, Window.height/10, 0, 0], width=1)
+            Line(points=[Window.width, Window.height/10, Window.width, 0], width=1)
+            Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
+
+
         self.add_widget(self.content)
-        Clock.schedule_interval(self.refresh, 0.1) # refresh every 0.1s
+        Clock.schedule_interval(self.refresh, 0.1)
 
     def set_event_text(self, msg):
         self.topbar.eventLabel.text = msg
@@ -164,7 +211,7 @@ class RealTimeScreen(BoxLayout):
         self.topbar.distLabel.text = f"{state['distance']} km"
 
         speed = state["speed"].metrics if state["speed"].metrics else None
-        self.speedLabel.text = f"{int(speed.current) if speed is not None else '--'} km/h"
+        self.speedLabel.text = f"{int(speed.current) if speed is not None and int(speed.current) != 0 else '0'} km/h"
         accStr = " 0.00 m/s²"
         if speed and speed.wAvgROC is not None:
             if(speed.wAvgROC) >= 0:
@@ -183,6 +230,10 @@ class RealTimeScreen(BoxLayout):
         temp = state["latestData"].get("0x05")
         self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
 
+        fCons = state["fuelCons"]
+        self.instConsLabel.text = f"Inst: {282.481/fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
+        self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
+
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
@@ -192,7 +243,7 @@ class MyApp(App):
     def build(self):
         self.analyser = Analyser()
         # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 16), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 
