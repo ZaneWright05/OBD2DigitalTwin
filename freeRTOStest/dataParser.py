@@ -22,28 +22,28 @@ from helpers import pid
 
 PIDS = {
     # need to add engine load to the design
-    "0x0C": pid(2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
-    "0x0D": pid(1, "kmh", lambda a,b: a, 333),
+    "0x0C": pid("RPM", 2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
+    "0x0D": pid("Speed", 1, "kmh", lambda a,b: a, 333),
 
-    "0x11": pid(1, "%", lambda a,b: (a * 100)/255, 500),
-    "0x0F": pid(1, "C", lambda a,b : a - 40, 500),
+    "0x11": pid("Throttle", 1, "%", lambda a,b: (a * 100)/255, 500),
+    "0x0F": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
 
     ## might be included in data?
-    "0x04": pid(1, "%", lambda a,b: (a * 100)/255, 500),
+    "0x04": pid("Engine Load", 1, "%", lambda a,b: (a * 100)/255, 500),
 
-    "0x10": pid(2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),
-    "0x42": pid(2, "V", lambda a,b: ((256* a) + b)/1000, 1000),
+    "0x10": pid("Mass Air Flow", 2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),
+    "0x42": pid("Battery Voltage", 2, "V", lambda a,b: ((256* a) + b)/1000, 1000),
     
-    "0x05": pid(1, "C", lambda a,b : a - 40,2000),
-    "0x23": pid(2, "kPa", lambda a,b : 10*((256*a) + b),2000),
+    "0x05": pid("Intake Air Temperature", 1, "C", lambda a,b : a - 40,2000),
+    "0x23": pid("Intake Manifold Pressure", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
 
-    "0x1F": pid(2, "s", lambda a, b: (256 * a) + b,4000)
+    "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
     }
 
 
 FUELCONSPID = "0xFF"
 COMPUTEDPIDS = {
-    "0xFF" : pid(2, "l/100km", lambda speed, speedSeq, maf, mafSeq: calcInstFuelCons(speed, speedSeq, maf, mafSeq), max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
+    "0xFF" : pid("Instantaneous Fuel Consumption", 2, "l/100km", lambda speed, speedSeq, maf, mafSeq: calcInstFuelCons(speed, speedSeq, maf, mafSeq), max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
 }
 
 # @dataclass(frozen=True)
@@ -100,23 +100,35 @@ class Analyser:
         if os.path.exists("historicMetrics.joblib"):
             historicMetrics = joblib.load("historicMetrics.joblib")
         else:
-            historicMetrics = {}
+            historicMetrics = None
 
-        if "0x0C" in historicMetrics:
-            print(f"Loaded historic metrics for RPM: {historicMetrics['0x0C']}")
-        else:
-            print("No historic metrics found for RPM.")
-        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=6000, lowThreshold=500, rocMin=0.5,window_size=15, historicMetrics=historicMetrics.get("0x0C"))
-        # self.rpmMetric.parent = self
+        if historicMetrics is not None:
+            for pid in PIDS.keys():
+                if pid in historicMetrics:
+                    print(f"Loaded historic metrics for {PIDS[pid].name}: {historicMetrics[pid]}")
+                else:
+                    print(f"No historic metrics found for {PIDS[pid].name}.")
+            for pid in COMPUTEDPIDS.keys():
+                if pid in historicMetrics:
+                    print(f"Loaded historic metrics for {COMPUTEDPIDS[pid].name}: {historicMetrics[pid]}")
+                else:
+                    print(f"No historic metrics found for {COMPUTEDPIDS[pid].name}.")
 
-        self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=5, historicMetrics=historicMetrics.get("0x0D"), conversionFactor=3.6)
+        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9, historicMetrics=historicMetrics.get("0x0C"))
+        self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=6, historicMetrics=historicMetrics.get("0x0D"), # window size 6 * 0.33s = 2s
+                                          conversionFactor=3.6, rocMin=0.5, lowRocThreshold= -3.5, highRocThreshold= 2.5)
+        
+        self.loadMetric = MetricAnalyser(PIDS["0x04"], window_size=6, historicMetrics=historicMetrics.get("0x04"))
+        self.throttleMetric = MetricAnalyser(PIDS["0x11"], window_size=6, historicMetrics=historicMetrics.get("0x11"))
+        self.fuelConsMetric = MetricAnalyser(COMPUTEDPIDS[FUELCONSPID], historicMetrics=historicMetrics.get(FUELCONSPID), eventsTracked = False, window_size=10)
 
-        if FUELCONSPID in historicMetrics:
-            print(f"Loaded historic metrics for fuel consumption: {historicMetrics[FUELCONSPID]}")
-        else:
-            print("No historic metrics found for fuel cons")
-        self.fuelConsMetric = MetricAnalyser(COMPUTEDPIDS[FUELCONSPID], historicMetrics=historicMetrics.get(FUELCONSPID), eventsTracked = False)
-
+        self.metrics = {
+            "0x0C": self.rpmMetric,
+            "0x0D": self.speedMetric,
+            "0x04": self.loadMetric,
+            "0x11": self.throttleMetric,
+           FUELCONSPID: self.fuelConsMetric}
+           
         self.lastEvent = None
         self.lastEventEndTime = 0 
         self.displayTime = 2 # in seconds
@@ -139,9 +151,12 @@ class Analyser:
             return
         joblib.dump({
             "0x0C": self.rpmMetric.update_HistoricMetrics(),
-            FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
+            "0x0D": self.speedMetric.update_HistoricMetrics(),
+            "0x04": self.loadMetric.update_HistoricMetrics(),
+            "0x11": self.throttleMetric.update_HistoricMetrics(),
+           FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
         }, "historicMetrics.joblib")
-        print(f"{self.rpmMetric.historicMetrics}\n{self.fuelConsMetric.historicMetrics}")
+        print("Historic metrics saved.")
 
     def estimate_gear(self, speed, rpm):
         if(speed is None or rpm is None):

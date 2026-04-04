@@ -234,8 +234,8 @@ class MetricAnalyser:
         avgThresh = None
 
         if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
-            histThresh = self.historicMetrics.minWAvgROC * 1.2 if self.historicMetrics.minWAvgROC != None else None
-            avgThresh = self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC != None else None
+            histThresh = self.historicMetrics.minWAvgROC * 1.2 if self.historicMetrics.minWAvgROC is not None else None
+            avgThresh = self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC is not None else None
 
         pri = None
         if self.lowRocThreshold is not None and roc <= self.lowRocThreshold :
@@ -260,8 +260,8 @@ class MetricAnalyser:
         avgThresh = None
 
         if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
-            histThresh = self.historicMetrics.maxWAvgROC * 1.2 if self.historicMetrics.maxWAvgROC != None else None
-            avgThresh =  self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC != None else None
+            histThresh = self.historicMetrics.maxWAvgROC * 1.2 if self.historicMetrics.maxWAvgROC is not None else None
+            avgThresh =  self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC is not None else None
 
 
         pri = None
@@ -282,8 +282,8 @@ class MetricAnalyser:
         avgThresh = None
 
         if  self.historicMetrics and self.historicMetrics.tripCount > minTrips: # not enough historic data
-            historicThresh = self.historicMetrics.max * 0.85 if self.historicMetrics.max != None else None
-            avgThresh = self.historicMetrics.average * 1.5 if self.historicMetrics.average != None else None
+            historicThresh = self.historicMetrics.max * 0.85 if self.historicMetrics.max is not None else None
+            avgThresh = self.historicMetrics.average * 1.5 if self.historicMetrics.average is not None else None
 
         pri = None
         if self.highThreshold  is not None and val >= self.highThreshold :
@@ -302,8 +302,8 @@ class MetricAnalyser:
         historicThresh = None
         avgThresh = None
         if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
-            historicThresh = self.historicMetrics.min * 1.15 if self.historicMetrics.min != None else None
-            avgThresh = self.historicMetrics.average * 0.5 if self.historicMetrics.average != None else None
+            historicThresh = self.historicMetrics.min * 1.15 if self.historicMetrics.min is not None else None
+            avgThresh = self.historicMetrics.average * 0.5 if self.historicMetrics.average is not None else None
 
         pri = None
         if self.lowThreshold is not None and val <= self.lowThreshold:
