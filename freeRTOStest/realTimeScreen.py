@@ -231,7 +231,7 @@ class RealTimeScreen(BoxLayout):
         self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
 
         fCons = state["fuelCons"]
-        self.instConsLabel.text = f"Inst: {282.481/fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
+        self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
         self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
 
     def update_bg_rect(self, *args):

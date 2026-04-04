@@ -38,11 +38,13 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: bool = True):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: bool = True):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
         self.lowThreshold = lowThreshold
+        self.highRocThreshold = highRocThreshold
+        self.lowRocThreshold = lowRocThreshold
         self.rocMin = rocMin
         self.historicMetrics = historicMetrics
 
@@ -164,10 +166,9 @@ class MetricAnalyser:
         if not self.eventsTracked:
             return
 
-        if self.highThreshold is not None:
-            self.above_event(value, seq)
-        if self.lowThreshold is not None:
-            self.below_event(value, seq)
+        # all internally check if there is a thresh val
+        self.above_event(value, seq)
+        self.below_event(value, seq)
         
         self.rapid_increase(seq)
         self.rapid_decrease(seq)
@@ -228,19 +229,20 @@ class MetricAnalyser:
         if roc >= 0 or abs(roc) < self.rocMin:
             self.end_event("rapid_decrease", seq)
             return
-        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
-            bound = self.metrics.minWAvgROC * 1.2 if self.metrics.minWAvgROC < 0 else float('-inf')
-            hist_min = bound
-        else:
-            hist_min = self.historicMetrics.minWAvgROC if self.historicMetrics.minWAvgROC != float('inf') else -0.1
-            bound = min(hist_min * 1.2, self.metrics.wAvgROC * 2)
+
+        histThresh = None
+        avgThresh = None
+
+        if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
+            histThresh = self.historicMetrics.minWAvgROC * 1.2 if self.historicMetrics.minWAvgROC != None else None
+            avgThresh = self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC != None else None
 
         pri = None
-        if roc < bound:
+        if self.lowRocThreshold is not None and roc <= self.lowRocThreshold :
             pri = 2
-        elif roc < hist_min:
+        elif histThresh is not None and roc <= histThresh:
             pri = 1
-        elif roc < self.metrics.wAvgROC * 1.5:
+        elif avgThresh is not None and roc <= avgThresh:
             pri = 0
         else:
             self.end_event("rapid_decrease", seq)
@@ -254,19 +256,20 @@ class MetricAnalyser:
             self.end_event("rapid_increase", seq)
             return
         
-        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
-            bound = self.metrics.maxWAvgROC * 2 if self.metrics.maxWAvgROC > 0 else float('inf')
-            hist_max = bound
-        else:
-            hist_max = self.historicMetrics.maxWAvgROC
-            bound = max(hist_max * 1.2, self.metrics.wAvgROC * 2)
+        histThresh = None
+        avgThresh = None
+
+        if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
+            histThresh = self.historicMetrics.maxWAvgROC * 1.2 if self.historicMetrics.maxWAvgROC != None else None
+            avgThresh =  self.historicMetrics.wAvgROC * 1.5 if self.historicMetrics.wAvgROC != None else None
+
 
         pri = None
-        if roc > bound:
+        if self.highRocThreshold is not None and roc >= self.highRocThreshold :
             pri = 2
-        elif roc > hist_max:
+        elif histThresh is not None and roc >= histThresh:
             pri = 1
-        elif roc > self.metrics.wAvgROC * 1.5:
+        elif avgThresh is not None and roc >= avgThresh:
             pri = 0
         else:
             self.end_event("rapid_increase", seq)
@@ -275,46 +278,39 @@ class MetricAnalyser:
         self.handle_event(seq, "rapid_increase", roc, pri) 
 
     def above_event(self, val, seq):
-        baseLine = self.highThreshold if self.highThreshold is not None else float('inf')
-        if(self.historicMetrics.tripCount <= minTrips): # not enough historic data
-            historicPeak = 0
-            avg = 0
-            dynamicThreshold = baseLine * 0.85
-        else:
-            historicPeak = self.historicMetrics.max if self.historicMetrics and self.historicMetrics.max > 0 else 0
-            avg = self.historicMetrics.average if self.historicMetrics else 0
-            dynamicThreshold = max(baseLine * 0.85, historicPeak * 0.85)
+        historicThresh = None
+        avgThresh = None
+
+        if  self.historicMetrics and self.historicMetrics.tripCount > minTrips: # not enough historic data
+            historicThresh = self.historicMetrics.max * 0.85 if self.historicMetrics.max != None else None
+            avgThresh = self.historicMetrics.average * 1.5 if self.historicMetrics.average != None else None
 
         pri = None
-        if val >= baseLine * 0.9: # close to abs max
+        if self.highThreshold  is not None and val >= self.highThreshold :
             pri = 2
-        elif val >= dynamicThreshold: # close to worst val recorded
+        elif historicThresh is not None and val >= historicThresh:
             pri = 1
-        elif avg != 0 and val >= avg * 1.5: # above average
+        elif avgThresh is not None and val >= avgThresh:
             pri = 0
         else:
             self.end_event("above_threshold", seq)
             return
-        
+            
         self.handle_event(seq, "above_threshold", val, pri)
 
     def below_event(self, val, seq):
-        baseLine = self.lowThreshold if self.lowThreshold is not None else float('-inf')
-        if not self.historicMetrics or self.historicMetrics.tripCount <= minTrips:
-            historicMin = baseLine
-            avg = 0
-            dynamicThreshold = baseLine * 1.15
-        else:
-            historicMin = self.historicMetrics.min if self.historicMetrics.min != float('inf') else baseLine
-            avg = self.historicMetrics.average if self.historicMetrics else baseLine
-            dynamicThreshold = min(baseLine * 1.15, historicMin * 1.15)
+        historicThresh = None
+        avgThresh = None
+        if self.historicMetrics and self.historicMetrics.tripCount > minTrips:
+            historicThresh = self.historicMetrics.min * 1.15 if self.historicMetrics.min != None else None
+            avgThresh = self.historicMetrics.average * 0.5 if self.historicMetrics.average != None else None
 
         pri = None
-        if val <= baseLine * 1.1: # close to abs min
+        if self.lowThreshold is not None and val <= self.lowThreshold:
             pri = 2
-        elif val <= dynamicThreshold: # close to lowest val recorded
+        elif historicThresh is not None and val <= historicThresh:
             pri = 1
-        elif avg != 0 and val <= avg * 0.5: # below average
+        elif avgThresh is not None and val <= avgThresh:
             pri = 0
         else:
             self.end_event("below_threshold", seq)
