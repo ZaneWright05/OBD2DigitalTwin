@@ -114,14 +114,30 @@ class Analyser:
                 else:
                     print(f"No historic metrics found for {COMPUTEDPIDS[pid].name}.")
 
-        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9, historicMetrics=historicMetrics.get("0x0C"), eventsTracked=False)
-        self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=6, historicMetrics=historicMetrics.get("0x0D"), # window size 6 * 0.33s = 2s
-                                          conversionFactor=3.6, rocMin=0.5, lowRocThreshold= -3.5, highRocThreshold= 2.5)
-        
-        self.loadMetric = MetricAnalyser(PIDS["0x04"], window_size=6, historicMetrics=historicMetrics.get("0x04"))
-        self.throttleMetric = MetricAnalyser(PIDS["0x11"], window_size=6, historicMetrics=historicMetrics.get("0x11"))
-        self.fuelConsMetric = MetricAnalyser(COMPUTEDPIDS[FUELCONSPID], historicMetrics=historicMetrics.get(FUELCONSPID), eventsTracked = False, window_size=10)
+        hist = historicMetrics or {}
 
+        self.rpmMetric = MetricAnalyser(
+            PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9,
+            historicMetrics=hist.get("0x0C"), eventsTracked=False
+        )
+
+        self.speedMetric = MetricAnalyser(
+            PIDS["0x0D"], window_size=6, historicMetrics=hist.get("0x0D"),
+            conversionFactor=3.6, rocMin=0.5, lowRocThreshold=-3.5, highRocThreshold=2.5
+        )
+
+        self.loadMetric = MetricAnalyser(
+            PIDS["0x04"], window_size=6, historicMetrics=hist.get("0x04"), eventsTracked=False
+        )
+
+        self.throttleMetric = MetricAnalyser(
+            PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11")
+        )
+
+        self.fuelConsMetric = MetricAnalyser(
+            COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
+            eventsTracked=False, window_size=10
+        )
         self.metrics = {
             "0x0C": self.rpmMetric,
             "0x0D": self.speedMetric,

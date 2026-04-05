@@ -1,7 +1,6 @@
 from helpers import pid
 from dataclasses import dataclass
 from collections import deque
-from typing import Optional
 import numpy as np
 from scipy.signal import savgol_filter
 
@@ -42,7 +41,7 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: Optional[HistoricMetrics] = None, eventsTracked: bool = True):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: bool = True):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -50,15 +49,7 @@ class MetricAnalyser:
         self.highRocThreshold = highRocThreshold
         self.lowRocThreshold = lowRocThreshold
         self.rocMin = rocMin
-        if historicMetrics is None:
-            self.historicMetrics = None
-        elif isinstance(historicMetrics, HistoricMetrics):
-            self.historicMetrics = historicMetrics
-        elif isinstance(historicMetrics, dict):
-            self.historicMetrics = HistoricMetrics(**historicMetrics)
-        else:
-            self.historicMetrics = None
-
+        self.historicMetrics = historicMetrics
         self.window_size = window_size
         self.sliding_window = deque(maxlen=window_size)
         self.window_sum = 0.0 # running sum for average calculation
