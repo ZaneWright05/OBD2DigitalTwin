@@ -41,7 +41,7 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: bool = True):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [True, True, True, True]):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -63,7 +63,13 @@ class MetricAnalyser:
         self.events = []
 
         self.active_events = {}
-        self.eventsTracked = eventsTracked
+        if len(eventsTracked) != 4:
+            raise ValueError("eventsTracked must contain exactly 4 booleans")
+
+        if not all(isinstance(x, bool) for x in eventsTracked):
+            raise TypeError("eventsTracked must contain only booleans")
+
+        self.eventsTracked = list(eventsTracked)
 
     def update_HistoricMetrics(self):
         if self.historicMetrics is None:
@@ -158,12 +164,15 @@ class MetricAnalyser:
             self.metrics.wAvgROC = 0.0
 
         self.metrics.wAvgROC = self.applySGFilter()
+        if self.eventsTracked[0]: # above
+            self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
+        if self.eventsTracked[1]: # below
+            self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
 
-        self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
-        self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
-
-        self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
-        self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
+        if self.eventsTracked[2]: # rapid increase
+            self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
+        if self.eventsTracked[3]: # rapid decrease
+            self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
 
         if not self.eventsTracked:
             return

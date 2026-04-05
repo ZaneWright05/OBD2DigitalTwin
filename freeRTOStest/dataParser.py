@@ -98,8 +98,13 @@ class Analyser:
         self.distanceTravelled_km = 0.0
 
         if os.path.exists("historicMetrics.joblib"):
-            historicMetrics = joblib.load("historicMetrics.joblib")
+            try:
+                historicMetrics = joblib.load("historicMetrics.joblib")
+            except Exception as e:
+                print(f"Error loading historic metrics: {e}, suggest deleting the historic data")
+                historicMetrics = None
         else:
+            print("No historic metrics found.")
             historicMetrics = None
 
         if historicMetrics is not None:
@@ -118,26 +123,27 @@ class Analyser:
 
         self.rpmMetric = MetricAnalyser(
             PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9,
-            historicMetrics=hist.get("0x0C"), eventsTracked=False
+            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, True, True]
         )
 
         self.speedMetric = MetricAnalyser(
             PIDS["0x0D"], window_size=6, historicMetrics=hist.get("0x0D"),
-            conversionFactor=3.6, rocMin=0.5, lowRocThreshold=-3.5, highRocThreshold=2.5
+            conversionFactor=3.6, rocMin=0.5, lowRocThreshold=-3.5, highRocThreshold=2.5, eventsTracked=[False, False, True, True]
         )
 
         self.loadMetric = MetricAnalyser(
-            PIDS["0x04"], window_size=6, historicMetrics=hist.get("0x04"), eventsTracked=False
+            PIDS["0x04"], window_size=6, historicMetrics=hist.get("0x04"), eventsTracked=[False, False, False, False]
         )
 
         self.throttleMetric = MetricAnalyser(
-            PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11")
+            PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False]
         )
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
-            eventsTracked=False, window_size=10
+            eventsTracked=[False, False, False, False], window_size=10
         )
+
         self.metrics = {
             "0x0C": self.rpmMetric,
             "0x0D": self.speedMetric,

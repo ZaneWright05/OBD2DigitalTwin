@@ -258,15 +258,14 @@ class RealTimeScreen(BoxLayout):
 class MyApp(App):
     def build(self):
         self.analyser = Analyser()
-        self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        # self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
+        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 
     def on_stop(self):
         print("App is stopping, saving historic metrics...")
         self.analyser.save_HistoricMetrics()
-        print("Historic Metrics saved.")
 
 
 if __name__ == "__main__":

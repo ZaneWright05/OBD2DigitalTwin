@@ -47,8 +47,7 @@ class Tachometer(Widget):
 
         self.add_widget(self.dial)
 
-        self.add_widget(self.minLabel)
-        self.add_widget(self.maxLabel)
+
         self.needle = Image(
             source=os.path.join(imgDir, "needleLong2Col.png"),
             size_hint=(None, None),
@@ -66,7 +65,9 @@ class Tachometer(Widget):
         self.add_widget(self.needle)
 
         self.add_widget(self.rpmLabel)
-
+        self.add_widget(self.minLabel)
+        self.add_widget(self.maxLabel)
+        
         self.bind(pos=self._sync_visuals, size=self._sync_visuals)
         self._sync_visuals()
 
