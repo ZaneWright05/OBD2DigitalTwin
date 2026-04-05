@@ -123,7 +123,7 @@ class Analyser:
 
         self.rpmMetric = MetricAnalyser(
             PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9,
-            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, True, True]
+            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, False, False]
         )
 
         self.speedMetric = MetricAnalyser(
@@ -206,11 +206,16 @@ class Analyser:
             # print(f"Processing PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
             # for metric in computedMetrics.values():
             if pid == "0x0D":
-                rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
-                if rpm_data is not None and seq == rpm_seq and self.currentGear[1] != seq:
-                    self.currentGear = (self.estimate_gear(value, rpm_data), seq)
+                # rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
+                rpmSeq = self.rpmMetric.recentSeq
+                rpmVal = self.rpmMetric.metrics.current
+                
+                if rpmVal != 0.00 and seq == rpmSeq and self.currentGear[1] != seq:
+                    self.currentGear = (self.estimate_gear(value, rpmVal), seq)
+                
                 prevSpeed = self.speedMetric.metrics.current if self.speedMetric.metrics else None
                 self.speedMetric.add_data_point(seq, value)
+
                 if prevSpeed is not None:
                     timeDiff = PIDS[pid].period_ms / 1000.0
                     averageSpeed = (prevSpeed + value) / 2
@@ -218,13 +223,10 @@ class Analyser:
     
             if pid == "0x0C":
                 self.rpmMetric.add_data_point(seq, value)
-                speed_data, speed_seq = self.mostRecentValues.get("0x0D", (None, None))
-                if speed_data is not None and seq == speed_seq and self.currentGear[1] != seq:
-                    # update if same and not already used for gear estimation
-                    self.currentGear = (self.estimate_gear(speed_data, value), seq) # store timestamp
-                # self.currentGear = self.estimate_gear(self.mostRecentValues.get("0x0D")[0], value)
-
-            # print(f"PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
+                speedSeq = self.speedMetric.recentSeq
+                speedVal = self.speedMetric.metrics.current
+                if speedVal != 0.00 and seq == speedSeq and self.currentGear[1] != seq:
+                    self.currentGear = (self.estimate_gear(speedVal, value), seq) # store timestamp
     
             if pid == "0x10": # derive inst fuel cons
                 speed, speedSeq = self.mostRecentValues.get("0x0D")

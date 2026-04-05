@@ -41,7 +41,9 @@ eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_dec
 minTrips = 3
 
 class MetricAnalyser:
-    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1, lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [True, True, True, True]):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1,
+                 lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, 
+                 historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [True, True, True, True]):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -60,6 +62,7 @@ class MetricAnalyser:
         self.conversionFactor = conversionFactor
 
         self.metrics = Metrics()
+        self.recentSeq = -1
         self.events = []
 
         self.active_events = {}
@@ -130,6 +133,7 @@ class MetricAnalyser:
             return
 
         self.data.append((seq, value))
+        self.recentSeq = seq
 
         if(len(self.sliding_window) == self.window_size):
             _, oldest = self.sliding_window.popleft() # remove oldest value from window
@@ -164,25 +168,22 @@ class MetricAnalyser:
             self.metrics.wAvgROC = 0.0
 
         self.metrics.wAvgROC = self.applySGFilter()
-        if self.eventsTracked[0]: # above
-            self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
-        if self.eventsTracked[1]: # below
-            self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
 
-        if self.eventsTracked[2]: # rapid increase
-            self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
-        if self.eventsTracked[3]: # rapid decrease
-            self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
-
-        if not self.eventsTracked:
-            return
-
-        # all internally check if there is a thresh val
-        self.above_event(value, seq)
-        self.below_event(value, seq)
         
-        self.rapid_increase(seq)
-        self.rapid_decrease(seq)
+        self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
+        self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC
+  
+        self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
+        self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
+
+        if self.eventsTracked[0]: # above
+            self.above_event(value, seq)
+        if self.eventsTracked[1]: # below
+            self.below_event(value, seq)
+        if self.eventsTracked[2]: # rapid increase
+            self.rapid_increase(seq)
+        if self.eventsTracked[3]: # rapid decrease
+            self.rapid_decrease(seq)
 
     def applySGFilter(self):
     # print(f"Applying SG filter to window: {window}")

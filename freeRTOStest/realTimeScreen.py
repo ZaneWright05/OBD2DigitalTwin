@@ -233,6 +233,9 @@ class RealTimeScreen(BoxLayout):
         self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
         self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
 
+        gear = state["gear"]
+        self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
+
         event = state["event"]
         if event is None:
             if not self.topbar.eventLabelHidden:
