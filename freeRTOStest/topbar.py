@@ -102,12 +102,14 @@ class TopBar(BoxLayout):
         self.rightContent.add_widget(self.timerImg)
         self.rightContent.add_widget(self.timeLabel)
 
+        self.eventLabelHidden = False
+
         self.eventLabel = Label(
             text="[45:20] Temperature coolant spike detected",
             size_hint=(None, None),   
             pos_hint={"center_y": 0.5},
             color=(1, 1, 1, 1),
-            font_size=16,
+            font_size=14,
             halign="left",
             valign="middle",
             shorten=True,

@@ -110,7 +110,6 @@ class RealTimeScreen(BoxLayout):
             size=convert_dimensions(17.5, 17.5),
             color=(0, 0, 0, 1),
             background_normal='', background_color=(1, 1, 1, 1))
-
             btn.bind(on_press=lambda instance, x=i: analyser.store_gear(int(x)))
             # btn.bind(on_press=lambda instance, x=i: self.set_event_text(f"Manually set gear to {x}"))
             gears.add_widget(btn)
@@ -234,6 +233,23 @@ class RealTimeScreen(BoxLayout):
         self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
         self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
 
+        event = state["event"]
+        if event is None:
+            if not self.topbar.eventLabelHidden:
+                self.topbar.eventLabelHidden = True
+                self.topbar.eventLabel.opacity = 0
+                self.topbar.eventLabel.disabled = True
+                self.set_event_text("")
+        else:
+            self.topbar.eventLabelHidden = False
+            self.topbar.eventLabel.opacity = 1
+            self.topbar.eventLabel.disabled = False
+            print(f"Event detected in UI: {event}")
+            endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+            startTime_ms = event.timestamp * event.pid.period_ms
+            startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
+            self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
@@ -242,8 +258,8 @@ class RealTimeScreen(BoxLayout):
 class MyApp(App):
     def build(self):
         self.analyser = Analyser()
-        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
+        self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
+        # self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 

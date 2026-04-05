@@ -27,12 +27,15 @@ class HistoricMetrics(Metrics):
 
 @dataclass
 class Event():
+    pid : pid
     timestamp: float # start seq
     type: str
     length: int # * period for the acc len
     details: list[str] # string based info
     values: list[float] # raw values during event, for later analysis
     priority: int
+    ended: bool = False
+
 
 eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_decrease", ]
 minTrips = 3
@@ -194,16 +197,17 @@ class MetricAnalyser:
 
     def end_event(self, eventType, seq):
         if self.active_events.get(eventType):
-                print(f"Ending {eventType} event")
+                # print(f"Ending {eventType} event")
                 event = self.active_events.pop(eventType)
+                event.ended = True
                 self.events.append(event)
-                print(f"Ended Event: {event.type} at {seq}, duration {event.length}, details: {event.details}, values: {event.values}, priority: {event.priority}")
+                # print(f"{self.pid.name}: Ended Event: {event.type} at {seq}, duration {event.length}, details: {event.details}, values: {event.values}, priority: {event.priority}")
         return
 
     def handle_event(self, seq, eventType, val, pri):
         if(self.active_events.get(eventType)):
             event = self.active_events[eventType]
-            print(f"Event {eventType}, updating values")
+            # print(f"Event {eventType}, updating values")
             currPri = event.priority
             event.length += 1
             event.priority = pri
@@ -214,8 +218,9 @@ class MetricAnalyser:
                 event.details.append(f"{seq}: {val}, new priority: {pri}")
             self.active_events[eventType] = event
         else:
-            print(f"New {eventType} event detected, creating event")
+            # print(f"New {eventType} event detected, creating event")
             self.active_events[eventType] = Event(
+                    pid=self.pid,
                     timestamp=seq,
                     type=eventType,
                     length=1,

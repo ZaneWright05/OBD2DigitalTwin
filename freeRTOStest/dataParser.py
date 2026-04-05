@@ -114,7 +114,7 @@ class Analyser:
                 else:
                     print(f"No historic metrics found for {COMPUTEDPIDS[pid].name}.")
 
-        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9, historicMetrics=historicMetrics.get("0x0C"))
+        self.rpmMetric = MetricAnalyser(PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9, historicMetrics=historicMetrics.get("0x0C"), eventsTracked=False)
         self.speedMetric = MetricAnalyser(PIDS["0x0D"], window_size=6, historicMetrics=historicMetrics.get("0x0D"), # window size 6 * 0.33s = 2s
                                           conversionFactor=3.6, rocMin=0.5, lowRocThreshold= -3.5, highRocThreshold= 2.5)
         
@@ -131,7 +131,7 @@ class Analyser:
            
         self.lastEvent = None
         self.lastEventEndTime = 0 
-        self.displayTime = 2 # in seconds
+        self.displayTime = 4 # in seconds
         
         self.fuelCons = None
         
@@ -212,6 +212,7 @@ class Analyser:
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
 
+    # fix, to use speed ROC not acc
     def store_gear(self, gear: int):
         with self.lock:
             speed, speedSeq = self.mostRecentValues.get("0x0D", (None, None))
@@ -240,7 +241,7 @@ class Analyser:
                 return
 
             with open("gear_estim.csv", "a") as f:
-                f.write(f"{self.mostRecentValues.get('0x0C', (None, None))[0]},{self.mostRecentValues.get('0x0D', (None, None))[0]},{self.currentAcc:.2f},{gear}\n")
+                f.write(f"{self.mostRecentValues.get('0x0C', (None, None))[0]},{self.mostRecentValues.get('0x0D', (None, None))[0]},{self.speedMetric.metrics.maxWAvgROC:.2f},{gear}\n")
                 f.flush()
             self.gearEstimator.add_data_point(rpm, speed, gear)
 
@@ -260,25 +261,29 @@ class Analyser:
                 for pid, (value, seq) in self.mostRecentValues.items()
             }
             recentEvent = None
-            if(self.rpmMetric.active_events):
-                highestPir = -1  
-                for event in self.rpmMetric.active_events.values():
-                    if event.priority > highestPir:
-                        highestPir = event.priority
-                        recentEvent = event
-                    elif event.priority == highestPir:
-                        if recentEvent is None or event.timestamp > recentEvent.timestamp:
+            highestPri = -1
+
+            for metric in self.metrics.values():
+                if metric.active_events:
+                    for event in metric.active_events.values():
+                        if event.priority > highestPri:
+                            highestPri = event.priority
                             recentEvent = event
+                        elif event.priority == highestPri:
+                            if recentEvent is None or event.timestamp > recentEvent.timestamp:
+                                recentEvent = event
+            if recentEvent is not None:
                 self.lastEvent = recentEvent
-                self.lastEventEndTime = 0
-            else: # handling for no active events but giving user time to read
-                if self.lastEvent and self.lastEventEndTime == 0:
-                    self.lastEventEndTime = time.time()
-                if self.lastEvent and (time.time() - self.lastEventEndTime) < self.displayTime:
+                self.lastEventEndTime = 0.0
+            else:
+                now = time.monotonic()
+                if self.lastEvent and self.lastEventEndTime == 0.0:
+                    self.lastEventEndTime = now
+                if self.lastEvent and (now - self.lastEventEndTime) < self.displayTime:
                     recentEvent = self.lastEvent
                 else:
                     self.lastEvent = None
-                    self.lastEventEndTime = 0
+                    self.lastEventEndTime = 0.0
             return {
                 "time": time_str,
                 "distance": f"{self.distanceTravelled_km:.2f}",
