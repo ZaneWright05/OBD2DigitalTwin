@@ -331,3 +331,21 @@ class MetricAnalyser:
             return
         
         self.handle_event(seq, "below_threshold", val, pri)
+
+class TempAnalyser(MetricAnalyser):
+    def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1,
+                 lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, 
+                 historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [False, False, False, False], thresholdTemp: float = 90.0):
+        super().__init__(pid, conversionFactor, highThreshold, lowThreshold, rocMin,
+                 lowRocThreshold, highRocThreshold, window_size, historicMetrics, eventsTracked)
+        
+        self.thresholdTemp = thresholdTemp
+        self.threshHoldReached = False
+
+    def add_data_point(self, seq, value):
+        if value >= self.thresholdTemp and not self.threshHoldReached:
+            self.threshHoldReached = True
+            self.eventsTracked = [True, True, False, False] # wait to track above and below events once threshold is reached
+            print(f"Threshold of {self.thresholdTemp} reached at seq {seq} with value {value}")
+
+        super().add_data_point(seq, value)

@@ -17,7 +17,7 @@ from serial.tools import list_ports
 from datetime import datetime
 
 from gear_estimate import GearEstimator
-from metricAnalyser import MetricAnalyser, Metrics, Event
+from metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
 from helpers import pid
 
 PIDS = {
@@ -45,18 +45,6 @@ FUELCONSPID = "0xFF"
 COMPUTEDPIDS = {
     "0xFF" : pid("Instantaneous Fuel Consumption", 2, "l/100km", lambda speed, speedSeq, maf, mafSeq: calcInstFuelCons(speed, speedSeq, maf, mafSeq), max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
 }
-
-# @dataclass(frozen=True)
-# class computedMetric:
-#     name: str
-#     unit: str
-#     parentPid: pid
-#     func: callable
-#     # timestamp_ms: int
-
-# computedMetrics = {
-#     "acc" : computedMetric("acceleration", "m/s^2", PIDS["0x0D"], lambda window, pid: savgol_filter(window, pid))
-# }
 
 # ranges from https://caracaltech.com/articles/article/627981fe2fb15a8d9e50f99c
 # lambda afr/afrStoch (14.5 diesel), afr vals from link above
@@ -139,6 +127,8 @@ class Analyser:
             PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False]
         )
 
+        self.tempMetric = TempAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[False, False, False, False], highThreshold=105, lowThreshold=85, thresholdTemp=87.5)
+
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
             eventsTracked=[False, False, False, False], window_size=10
@@ -149,7 +139,8 @@ class Analyser:
             "0x0D": self.speedMetric,
             "0x04": self.loadMetric,
             "0x11": self.throttleMetric,
-           FUELCONSPID: self.fuelConsMetric}
+            "0x0F": self.tempMetric,
+            FUELCONSPID: self.fuelConsMetric}
            
         self.lastEvent = None
         self.lastEventEndTime = 0 
@@ -176,6 +167,7 @@ class Analyser:
             "0x0D": self.speedMetric.update_HistoricMetrics(),
             "0x04": self.loadMetric.update_HistoricMetrics(),
             "0x11": self.throttleMetric.update_HistoricMetrics(),
+            "0x0F": self.tempMetric.update_HistoricMetrics(),
            FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
         }, "historicMetrics.joblib")
         print("Historic metrics saved.")
