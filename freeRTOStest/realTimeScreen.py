@@ -175,8 +175,8 @@ class RealTimeScreen(BoxLayout):
         self.content.add_widget(driverTitle)
 
         button1 = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
-        button2 = Button(text="Driver Behavior", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
-        button3 = Button(text="Vehicle Health", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
+        button2 = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
+        button3 = Button(text="History", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
         button4 = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
 
         for btn in [button1, button2, button3, button4]:
@@ -248,7 +248,7 @@ class RealTimeScreen(BoxLayout):
                 self.topbar.eventLabelHidden = False
                 self.topbar.eventLabel.opacity = 1
                 self.topbar.eventLabel.disabled = False
-                print(f"Event detected in UI: {event}")
+                # print(f"Event detected in UI: {event}")
                 endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
                 startTime_ms = event.timestamp * event.pid.period_ms
                 startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
@@ -262,8 +262,8 @@ class RealTimeScreen(BoxLayout):
 class MyApp(App):
     def build(self):
         self.analyser = Analyser()
-        self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        # self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
+        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 

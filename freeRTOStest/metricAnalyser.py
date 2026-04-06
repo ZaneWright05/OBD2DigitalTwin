@@ -63,6 +63,7 @@ class MetricAnalyser:
 
         self.metrics = Metrics()
         self.recentSeq = -1
+        self.outOfSequence = False
         self.events = []
 
         self.active_events = {}
@@ -133,6 +134,13 @@ class MetricAnalyser:
             return
 
         self.data.append((seq, value))
+        
+        if self.recentSeq != -1 and self.recentSeq != (seq - 1):
+            # out of sequence, notify ui and parser
+            self.outOfSequence = True
+        else:            
+            self.outOfSequence = False
+
         self.recentSeq = seq
 
         if(len(self.sliding_window) == self.window_size):

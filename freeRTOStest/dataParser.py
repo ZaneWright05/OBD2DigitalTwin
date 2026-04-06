@@ -19,6 +19,7 @@ from datetime import datetime
 from gear_estimate import GearEstimator
 from metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
 from helpers import pid
+# from estimateEngineLoad import EngineLoadEstimator
 
 PIDS = {
     # need to add engine load to the design
@@ -126,6 +127,7 @@ class Analyser:
         self.throttleMetric = MetricAnalyser(
             PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False]
         )
+        # self.loadEstimator = EngineLoadEstimator()
 
         self.tempMetric = TempAnalyser(PIDS["0x05"], historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False], highThreshold=105, lowThreshold=85, thresholdTemp=87.5)
 
@@ -159,11 +161,11 @@ class Analyser:
         self.polyNom = 2
         self.speedWindow = deque(maxlen=self.windowSize)
 
-        self.packetMissed = False
-        self.missCount = 0
         # self.timeWindow = deque(maxlen=self.windowSize)
 
     def save_HistoricMetrics(self):
+        # self.loadEstimator.save_bins()
+        # print("Engine load estimator bins saved.")
         # save historic metrics to file
         if (time.monotonic() - self.connectionStartTime < 300):
             print("Trip too short (< 5 minutes), not saving historic metrics...")
@@ -229,8 +231,17 @@ class Analyser:
     
             elif pid == "0x10": # derive inst fuel cons
                 self.MAFMetric.add_data_point(seq, value)
+                
+                ## with maf we update load estimator and fuel cons metric
                 self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
+                # self.loadEstimator.update(self.rpmMetric.metrics.current, value, self.speedMetric.metrics.wAvgROC)
 
+            elif pid == "0x04":
+                self.loadMetric.add_data_point(seq, value)
+                
+                # loadEstim = self.loadEstimator.estimate_load(self.rpmMetric.metrics.current, self.MAFMetric.metrics.current)
+                # if loadEstim is not None:
+                #     print(f"Actual Load: {value:.2f}%, Estimated Load: {loadEstim:.2f}%")
             else:
                  metric = self.metrics.get(pid)
                  if metric is not None:
@@ -269,6 +280,22 @@ class Analyser:
                 f.write(f"{rpm},{speed},{self.speedMetric.metrics.maxWAvgROC:.2f},{gear}\n")
                 f.flush()
             self.gearEstimator.add_data_point(rpm, speed, gear)
+
+    def calculate_freshness(self):
+        score = 1.0
+        for metric in self.metrics.values():
+            if metric.outOfSequence:
+                score -= 1/len(self.metrics) # each out of sequence metric reduces freshness by equal amount
+        return max(score, 0.0)
+
+    def get_snapshot(self):
+        return {
+            "metrics": self.metrics,
+            "tripLength" : self.distanceTravelled_km,
+            "tripTime" : time.monotonic() - self.connectionStartTime if self.connectionStartTime else 0,
+            "currentGear": self.currentGear,
+            "freshness": self.calculate_freshness()
+        }
 
     def get_most_recent(self):
         if not self.connected:
