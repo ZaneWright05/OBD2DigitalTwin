@@ -203,56 +203,57 @@ class RealTimeScreen(BoxLayout):
         self.topbar.eventLabel.text = msg
 
     def refresh(self, dt):
-        state = self.analyser.get_most_recent()
-        if state is None:
-            return
-        self.topbar.timeLabel.text = state["time"]
-        self.topbar.distLabel.text = f"{state['distance']} km"
+        if self.analyser.connected:
+            state = self.analyser.get_most_recent()
+            if state is None:
+                return
+            self.topbar.timeLabel.text = state["time"]
+            self.topbar.distLabel.text = f"{state['distance']} km"
 
-        speed = state["speed"].metrics if state["speed"].metrics else None
-        self.speedLabel.text = f"{int(speed.current) if speed is not None and int(speed.current) != 0 else '0'} km/h"
-        accStr = " 0.00 m/s²"
-        if speed and speed.wAvgROC is not None:
-            if(speed.wAvgROC) >= 0:
-                accStr = f" {speed.wAvgROC:.2f} m/s²"
+            speed = state["speed"].metrics if state["speed"].metrics else None
+            self.speedLabel.text = f"{int(speed.current) if speed is not None and int(speed.current) != 0 else '0'} km/h"
+            accStr = " 0.00 m/s²"
+            if speed and speed.wAvgROC is not None:
+                if(speed.wAvgROC) >= 0:
+                    accStr = f" {speed.wAvgROC:.2f} m/s²"
+                else:
+                    accStr = f"{speed.wAvgROC:.2f} m/s²"
+            self.accMet.label.text = accStr
+
+            rpm = state["rpm"].metrics.current if state["rpm"].metrics else None
+            self.tach.set_target_rpm(rpm)
+            self.tach.rpmLabel.text = f"{int(rpm) if rpm is not None else '0'} RPM"
+
+            volt = state["latestData"].get("0x42")
+            self.voltMet.label.text = f"{volt['value']:.2f} V" if volt is not None else "-- V"
+
+            temp = state["latestData"].get("0x05")
+            self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
+
+            fCons = state["fuelCons"]
+            self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
+            self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
+
+            gear = state["gear"]
+            self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
+
+            event = state["event"]
+            if event is None:
+                if not self.topbar.eventLabelHidden:
+                    self.topbar.eventLabelHidden = True
+                    self.topbar.eventLabel.opacity = 0
+                    self.topbar.eventLabel.disabled = True
+                    self.set_event_text("")
             else:
-                accStr = f"{speed.wAvgROC:.2f} m/s²"
-        self.accMet.label.text = accStr
-
-        rpm = state["rpm"].metrics.current if state["rpm"].metrics else None
-        self.tach.set_target_rpm(rpm)
-        self.tach.rpmLabel.text = f"{int(rpm) if rpm is not None else '0'} RPM"
-
-        volt = state["latestData"].get("0x42")
-        self.voltMet.label.text = f"{volt['value']:.2f} V" if volt is not None else "-- V"
-
-        temp = state["latestData"].get("0x05")
-        self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
-
-        fCons = state["fuelCons"]
-        self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
-        self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
-
-        gear = state["gear"]
-        self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
-
-        event = state["event"]
-        if event is None:
-            if not self.topbar.eventLabelHidden:
-                self.topbar.eventLabelHidden = True
-                self.topbar.eventLabel.opacity = 0
-                self.topbar.eventLabel.disabled = True
-                self.set_event_text("")
-        else:
-            self.topbar.eventLabelHidden = False
-            self.topbar.eventLabel.opacity = 1
-            self.topbar.eventLabel.disabled = False
-            print(f"Event detected in UI: {event}")
-            endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
-            startTime_ms = event.timestamp * event.pid.period_ms
-            startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-            self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
-
+                self.topbar.eventLabelHidden = False
+                self.topbar.eventLabel.opacity = 1
+                self.topbar.eventLabel.disabled = False
+                print(f"Event detected in UI: {event}")
+                endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+                startTime_ms = event.timestamp * event.pid.period_ms
+                startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
+                self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+        
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
@@ -261,8 +262,8 @@ class RealTimeScreen(BoxLayout):
 class MyApp(App):
     def build(self):
         self.analyser = Analyser()
-        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
+        self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
+        # self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
         return RealTimeScreen(self.analyser)
 

@@ -26,7 +26,7 @@ PIDS = {
     "0x0D": pid("Speed", 1, "kmh", lambda a,b: a, 333),
 
     "0x11": pid("Throttle", 1, "%", lambda a,b: (a * 100)/255, 500),
-    "0x0F": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
+    "0x05": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
 
     ## might be included in data?
     "0x04": pid("Engine Load", 1, "%", lambda a,b: (a * 100)/255, 500),
@@ -34,7 +34,7 @@ PIDS = {
     "0x10": pid("Mass Air Flow", 2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),
     "0x42": pid("Battery Voltage", 2, "V", lambda a,b: ((256* a) + b)/1000, 1000),
     
-    "0x05": pid("Intake Air Temperature", 1, "C", lambda a,b : a - 40,2000),
+    "0x0F": pid("Intake Air Temperature", 1, "C", lambda a,b : a - 40,2000),
     "0x23": pid("Intake Manifold Pressure", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
 
     "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
@@ -127,19 +127,22 @@ class Analyser:
             PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False]
         )
 
-        self.tempMetric = TempAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[False, False, False, False], highThreshold=105, lowThreshold=85, thresholdTemp=87.5)
+        self.tempMetric = TempAnalyser(PIDS["0x05"], historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False], highThreshold=105, lowThreshold=85, thresholdTemp=87.5)
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
             eventsTracked=[False, False, False, False], window_size=10
         )
 
+        self.MAFMetric = MetricAnalyser(PIDS["0x10"], window_size=6, historicMetrics=hist.get("0x10"), eventsTracked=[False, False, False, False])
+
         self.metrics = {
             "0x0C": self.rpmMetric,
             "0x0D": self.speedMetric,
             "0x04": self.loadMetric,
             "0x11": self.throttleMetric,
-            "0x0F": self.tempMetric,
+            "0x05": self.tempMetric,
+            "0x10": self.MAFMetric,
             FUELCONSPID: self.fuelConsMetric}
            
         self.lastEvent = None
@@ -155,6 +158,9 @@ class Analyser:
         self.windowSize = 5
         self.polyNom = 2
         self.speedWindow = deque(maxlen=self.windowSize)
+
+        self.packetMissed = False
+        self.missCount = 0
         # self.timeWindow = deque(maxlen=self.windowSize)
 
     def save_HistoricMetrics(self):
@@ -167,7 +173,8 @@ class Analyser:
             "0x0D": self.speedMetric.update_HistoricMetrics(),
             "0x04": self.loadMetric.update_HistoricMetrics(),
             "0x11": self.throttleMetric.update_HistoricMetrics(),
-            "0x0F": self.tempMetric.update_HistoricMetrics(),
+            "0x05": self.tempMetric.update_HistoricMetrics(),
+            "0x10": self.MAFMetric.update_HistoricMetrics(),
            FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
         }, "historicMetrics.joblib")
         print("Historic metrics saved.")
@@ -213,17 +220,21 @@ class Analyser:
                     averageSpeed = (prevSpeed + value) / 2
                     self.distanceTravelled_km += (averageSpeed * timeDiff) / 3600.0
     
-            if pid == "0x0C":
+            elif pid == "0x0C":
                 self.rpmMetric.add_data_point(seq, value)
                 speedSeq = self.speedMetric.recentSeq
                 speedVal = self.speedMetric.metrics.current
                 if speedVal != 0.00 and seq == speedSeq and self.currentGear[1] != seq:
                     self.currentGear = (self.estimate_gear(speedVal, value), seq) # store timestamp
     
-            if pid == "0x10": # derive inst fuel cons
-                speed, speedSeq = self.mostRecentValues.get("0x0D")
-                load, loadSeq = self.mostRecentValues.get("0x04")
-                self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(speed, speedSeq, value, seq, load, loadSeq))
+            elif pid == "0x10": # derive inst fuel cons
+                self.MAFMetric.add_data_point(seq, value)
+                self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
+
+            else:
+                 metric = self.metrics.get(pid)
+                 if metric is not None:
+                    metric.add_data_point(seq, value)
 
             self.pidValues[pid].append((value, seq))
             self.mostRecentValues[pid] = (value, seq)
@@ -231,23 +242,21 @@ class Analyser:
     # fix, to use speed ROC not acc
     def store_gear(self, gear: int):
         with self.lock:
-            speed, speedSeq = self.mostRecentValues.get("0x0D", (None, None))
-            rpm, rpmSeq = self.mostRecentValues.get("0x0C", (None, None))
+            speed = self.speedMetric.metrics.current
+            speedSeq = self.speedMetric.recentSeq
+            rpm = self.rpmMetric.metrics.current
+            rpmSeq = self.rpmMetric.recentSeq 
             if speed is None or rpm is None or speed < 5:
                 return
             matching = False
             if speedSeq != rpmSeq:
-                if speedSeq > rpmSeq and len(self.pidValues["0x0D"]) >= 2: ## speed is more recent get previous so it matches rpm
-                    speedOld, speedOldSeq = self.pidValues["0x0D"][-2]
-                    if speedOldSeq == rpmSeq:
-                        speed = speedOld
-                        matching = True
-                elif len(self.pidValues["0x0C"]) >= 2:
-                    rpmOld, rpmOldSeq = self.pidValues["0x0C"][-2]
-                    if rpmOldSeq == speedSeq:
-                        rpm = rpmOld
-                        matching = True
-            # self.currentGear = gear
+                if speedSeq == (rpmSeq - 1): ## rpm is more recent get previous so it matches speed
+                    rpm = self.rpmMetric.data[-2][1] if len(self.rpmMetric.data) >= 2 else None
+                    matching = True
+
+                elif rpmSeq == (speedSeq - 1): ## speed is more recent get previous so it matches rpm
+                    speed = self.speedMetric.data[-2][1] if len(self.speedMetric.data) >= 2 else None
+                    matching = True
             else:
                 matching = True
 
@@ -257,7 +266,7 @@ class Analyser:
                 return
 
             with open("gear_estim.csv", "a") as f:
-                f.write(f"{self.mostRecentValues.get('0x0C', (None, None))[0]},{self.mostRecentValues.get('0x0D', (None, None))[0]},{self.speedMetric.metrics.maxWAvgROC:.2f},{gear}\n")
+                f.write(f"{rpm},{speed},{self.speedMetric.metrics.maxWAvgROC:.2f},{gear}\n")
                 f.flush()
             self.gearEstimator.add_data_point(rpm, speed, gear)
 

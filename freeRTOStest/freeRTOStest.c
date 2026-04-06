@@ -11,22 +11,22 @@
 //#include "class/cdc/cdc_device.h"
 
 #define RPM_VEH_SPEED_PERIOD_MS 333
-#define THRTL_INTK_LOAD_PERIOD_MS 500
+#define THRTL_COOLANT_LOAD_PERIOD_MS 500
 #define MAF_CTRL_VOLT_PERIOD_MS 1000
-#define COOLNT_FUEL_PRESS_PERIOD_MS 2000
+#define INTAKE_FUEL_PRESS_PERIOD_MS 2000
 #define RUNTIME_SINCE_ENG_START_PERIOD_MS 4000
 
 StaticTask_t RPM_VEH_SPEED_task_p;
 StackType_t RPM_VEH_SPEED_stack[256];
 
-StaticTask_t THRTL_INTK_task_p;
-StackType_t THRTL_INTK_stack[256];
+StaticTask_t THRTL_COOLANT_LOAD_task_p;
+StackType_t THRTL_COOLANT_LOAD_stack[256];
 
 StaticTask_t MAF_CTRL_VOLT_task_p;
 StackType_t MAF_CTRL_VOLT_stack[256];
 
-StaticTask_t COOLNT_FUEL_PRESS_task_p;
-StackType_t COOLNT_FUEL_PRESS_stack[256];
+StaticTask_t INTAKE_FUEL_PRESS_task_p;
+StackType_t INTAKE_FUEL_PRESS_stack[256];
 
 StaticTask_t RUNTIME_SINCE_ENG_START_task_p;
 StackType_t RUNTIME_SINCE_ENG_START_stack[256];
@@ -277,15 +277,15 @@ void rpm_veh_task(void *params)
     }
 }
 
-void thrttl_intk_load_task(void *params)
+void thrttl_coolant_load_task(void *params)
 {
-    const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_INTK_LOAD_PERIOD_MS); // task period 5s
+    const TickType_t period_ticks = pdMS_TO_TICKS(THRTL_COOLANT_LOAD_PERIOD_MS); // task period 5s
     const uint task_PIN = 15;
 
     uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
-    uint8_t thrtlIntkLdFrame[8] = {0x04, 0x01, 0x11, 0x0F, 0x04, 0x00, 0x00, 0x00};// throttle, intake temp, engine load
+    uint8_t thrtlIntkLdFrame[8] = {0x04, 0x01, 0x11, 0x05, 0x04, 0x00, 0x00, 0x00};// throttle, coolant temp, engine load
     TickType_t nextRelease = xTaskGetTickCount();
     for (;;) 
     {
@@ -318,20 +318,20 @@ void maf_ctrl_volt_task(void* params){
     }
 }
 
-void cllnt_fuel_press_task(void* params){
-    const TickType_t period_ticks = pdMS_TO_TICKS(COOLNT_FUEL_PRESS_PERIOD_MS); // task period 5s
+void intake_fuel_press_task(void* params){
+    const TickType_t period_ticks = pdMS_TO_TICKS(INTAKE_FUEL_PRESS_PERIOD_MS); // task period 5s
     const uint task_PIN = 4;
 
     uint32_t seqNum = 0;
     gpio_init(task_PIN);
     gpio_set_dir(task_PIN, GPIO_OUT);
-    uint8_t cllntFuelRlFrame[8] = {0x03, 0x01, 0x05, 0x23,0x00, 0x00, 0x00, 0x00};
+    uint8_t intakeFuelRlFrame[8] = {0x03, 0x01, 0x0F, 0x23,0x00, 0x00, 0x00, 0x00};
     TickType_t nextRelease = xTaskGetTickCount();
     for(;;){
         gpio_put(task_PIN, 1);
-        uint8_t cllntFuelRlReply[8] = {0};
-        CAN_transmission(cllntFuelRlFrame, cllntFuelRlReply);
-        decode_Reply_Frame(cllntFuelRlReply, seqNum);
+        uint8_t intakeFuelRlReply[8] = {0};
+        CAN_transmission(intakeFuelRlFrame, intakeFuelRlReply);
+        decode_Reply_Frame(intakeFuelRlReply, seqNum);
         seqNum++;
         gpio_put(task_PIN, 0);
         vTaskDelayUntil(&nextRelease, period_ticks);
@@ -377,13 +377,13 @@ int main()
                 RPM_VEH_SPEED_stack,
             &RPM_VEH_SPEED_task_p);
 
-    xTaskCreateStatic(thrttl_intk_load_task,
-                "Throttle & Intake Task",
+    xTaskCreateStatic(thrttl_coolant_load_task,
+                "Throttle & Coolant and load Task",
                 256,
                 NULL,
                 4,
-                THRTL_INTK_stack,
-            &THRTL_INTK_task_p);
+                THRTL_COOLANT_LOAD_stack,
+            &THRTL_COOLANT_LOAD_task_p);
 
     xTaskCreateStatic(maf_ctrl_volt_task,
                 "MAF & Voltage Task",
@@ -393,13 +393,13 @@ int main()
                 MAF_CTRL_VOLT_stack,
             &MAF_CTRL_VOLT_task_p);
     
-    xTaskCreateStatic(cllnt_fuel_press_task,
-                "Coolant & Fuel Pressure Task",
+    xTaskCreateStatic(intake_fuel_press_task,
+                "Intake & Fuel Pressure Task",
                 256,
                 NULL,
                 2,
-                COOLNT_FUEL_PRESS_stack,
-            &COOLNT_FUEL_PRESS_task_p);
+                INTAKE_FUEL_PRESS_stack,
+            &INTAKE_FUEL_PRESS_task_p);
 
     xTaskCreateStatic(rt_since_strt_task,
                 "Run Time Since Engine Start Task",
