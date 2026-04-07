@@ -22,9 +22,9 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
-from dataParser import Analyser, read_csv, read_from_com
-from helpers import pid
-from metricAnalyser import Metrics, MetricAnalyser, Event
+from model.dataParser import Parser, read_csv, read_from_com
+from model.helpers import pid
+from model.metricAnalyser import Metrics, MetricAnalyser, Event
 
 screen_width_px = 800 # 154.08 mm
 screen_width_mm = 154.08
@@ -150,7 +150,7 @@ class TestScreen(BoxLayout):
 
 class MyApp(App):
     def build(self):
-        self.analyser = Analyser()
+        self.analyser = Parser()
 
         # self.worker = Thread(target=read_from_com, 
         #                      args=(self.analyser,), 

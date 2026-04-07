@@ -136,6 +136,16 @@ class TopBar(BoxLayout):
         self.add_widget(Widget(size_hint=(1, 1)))
         self.add_widget(self.rightContent)
 
+    def set_connection(self, level):
+        if level == "low":
+            self.signalImg.source = os.path.join(imgDir, "lowConnection.png")
+        elif level == "medium":
+            self.signalImg.source = os.path.join(imgDir, "medConnection.png")
+        elif level == "high":
+            self.signalImg.source = os.path.join(imgDir, "highConnection.png")
+        else:
+            print("No conn img")
+
     def update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size

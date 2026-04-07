@@ -1,4 +1,4 @@
-from helpers import pid
+from model.helpers import pid
 from dataclasses import dataclass
 from collections import deque
 import numpy as np
@@ -37,7 +37,7 @@ class Event():
     ended: bool = False
 
 
-eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_decrease", ]
+eventTypes = ["above_threshold", "below_threshold", "rapid_increase", "rapid_decrease"]
 minTrips = 3
 
 class MetricAnalyser:
@@ -167,10 +167,6 @@ class MetricAnalyser:
                 # print(f"Calculating ROC: curr_val={curr_val}, prev_val={prev_val}, seq_diff={seq_diff}ms")
                 self.metrics.instROC = (curr_val - prev_val) / seq_diff if seq_diff != 0 else 0.0
 
-                # # calc avg roc over window
-                # first_seq, first_val = self.sliding_window[0]
-                # total_seq_diff = (curr_seq - first_seq) * self.pid.period_ms
-                # self.metrics.wAvgROC = (curr_val - first_val) / total_seq_diff if total_seq_diff != 0 else 0.0
         else:
             self.metrics.instROC = 0.0
             self.metrics.wAvgROC = 0.0

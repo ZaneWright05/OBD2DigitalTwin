@@ -1,86 +1,15 @@
-# test script to analyse the data log from recieve.py
-
-import csv
 import os
 import threading
 from collections import defaultdict, deque
 import time
-# import matplotlib.pyplot as plt
 import joblib
-from scipy.signal import savgol_filter
-from dataclasses import dataclass
-#from scipy.signal import savgol_filter
-import numpy as np
-from time import sleep 
-import serial
-from serial.tools import list_ports
-from datetime import datetime
+from model.gear_estimate import GearEstimator
+from model.metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
+from model.helpers import pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
 
-from gear_estimate import GearEstimator
-from metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
-from helpers import pid
-# from estimateEngineLoad import EngineLoadEstimator
-
-PIDS = {
-    # need to add engine load to the design
-    "0x0C": pid("RPM", 2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
-    "0x0D": pid("Speed", 1, "kmh", lambda a,b: a, 333),
-
-    "0x11": pid("Throttle", 1, "%", lambda a,b: (a * 100)/255, 500),
-    "0x05": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
-
-    ## might be included in data?
-    "0x04": pid("Engine Load", 1, "%", lambda a,b: (a * 100)/255, 500),
-
-    "0x10": pid("Mass Air Flow", 2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),
-    "0x42": pid("Battery Voltage", 2, "V", lambda a,b: ((256* a) + b)/1000, 1000),
-    
-    "0x0F": pid("Intake Air Temperature", 1, "C", lambda a,b : a - 40,2000),
-    "0x23": pid("Intake Manifold Pressure", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
-
-    "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
-    }
-
-
-FUELCONSPID = "0xFF"
-COMPUTEDPIDS = {
-    "0xFF" : pid("Instantaneous Fuel Consumption", 2, "l/100km", lambda speed, speedSeq, maf, mafSeq: calcInstFuelCons(speed, speedSeq, maf, mafSeq), max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
-}
-
-# ranges from https://caracaltech.com/articles/article/627981fe2fb15a8d9e50f99c
-# lambda afr/afrStoch (14.5 diesel), afr vals from link above
-def load_to_lambda(load):
-    if load < 100/3: # low load
-        lowRange = (6.9, 2.8)
-        pos = load / (100/3)
-        return lowRange[0] + pos * (lowRange[1] - lowRange[0])
-    elif load < 100 * (2/3): # medium load
-        medRange = (2.8, 1.7)
-        pos = (load - 100/3) / (100 * (2/3) - 100/3)
-        return medRange[0] + pos * (medRange[1] - medRange[0])
-    else: # highload
-        highRange = (1.7, 1.1)
-        pos = (load - (100 * (2/3))) / (100 - (100 * (2/3)))
-        return highRange[0] + pos * (highRange[1] - highRange[0])
-
-def calcInstFuelCons(speed, speedSeq, maf, mafSeq, load, loadSeq):
-    speedTime = speedSeq * PIDS["0x0D"].period_ms / 1000.0
-    mafTime = mafSeq * PIDS["0x10"].period_ms / 1000.0
-    loadTime = loadSeq * PIDS["0x04"].period_ms / 1000.0
-    valid = abs(speedTime - mafTime) < 0.5 and abs(speedTime - loadTime) < 0.5 and abs(mafTime - loadTime) < 0.5
-    if valid and speed != 0: # compare timestamps
-
-        ff = (maf * 3600) / (load_to_lambda(load) *14.5 * 820)
-        fCons = ff / speed
-        return (fCons * 100) # convert to l/100km
-    else:
-        return None
-
-class Analyser:
+class Parser:
     def __init__(self):
         self.lock = threading.Lock()
-        self.pidValues = defaultdict(list)
-        self.mostRecentValues = {}
         
         self.connected = False
         self.connectionStartTime = None # for the timer
@@ -138,6 +67,8 @@ class Analyser:
 
         self.MAFMetric = MetricAnalyser(PIDS["0x10"], window_size=6, historicMetrics=hist.get("0x10"), eventsTracked=[False, False, False, False])
 
+        self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=6, historicMetrics=hist.get("0x42"), eventsTracked=[False, False, False, False])
+
         self.metrics = {
             "0x0C": self.rpmMetric,
             "0x0D": self.speedMetric,
@@ -145,6 +76,7 @@ class Analyser:
             "0x11": self.throttleMetric,
             "0x05": self.tempMetric,
             "0x10": self.MAFMetric,
+            "0x42": self.voltMetric,
             FUELCONSPID: self.fuelConsMetric}
            
         self.lastEvent = None
@@ -157,30 +89,21 @@ class Analyser:
         self.currentGear = (None, None)
         self.currentGRatio = None
 
-        self.windowSize = 5
-        self.polyNom = 2
-        self.speedWindow = deque(maxlen=self.windowSize)
-
-        # self.timeWindow = deque(maxlen=self.windowSize)
-
     def save_HistoricMetrics(self):
-        # self.loadEstimator.save_bins()
-        # print("Engine load estimator bins saved.")
-        # save historic metrics to file
+        if self.connectionStartTime is None:
+            return
         if (time.monotonic() - self.connectionStartTime < 300):
             print("Trip too short (< 5 minutes), not saving historic metrics...")
             return
-        joblib.dump({
-            "0x0C": self.rpmMetric.update_HistoricMetrics(),
-            "0x0D": self.speedMetric.update_HistoricMetrics(),
-            "0x04": self.loadMetric.update_HistoricMetrics(),
-            "0x11": self.throttleMetric.update_HistoricMetrics(),
-            "0x05": self.tempMetric.update_HistoricMetrics(),
-            "0x10": self.MAFMetric.update_HistoricMetrics(),
-           FUELCONSPID: self.fuelConsMetric.update_HistoricMetrics()
-        }, "historicMetrics.joblib")
+        history_payload = {
+            pid: metric.update_HistoricMetrics()
+            for pid, metric in self.metrics.items()
+        }
+        joblib.dump(history_payload, "historicMetrics.joblib")
         print("Historic metrics saved.")
 
+    # TODO: use the confidence and add transition logic, 
+    # i.e if currently in gear 3, only transition to gear 2 or 4 and require higher confidence for a jump to gear 1 or 5
     def estimate_gear(self, speed, rpm):
         if(speed is None or rpm is None):
             return 0
@@ -243,14 +166,10 @@ class Analyser:
                 # if loadEstim is not None:
                 #     print(f"Actual Load: {value:.2f}%, Estimated Load: {loadEstim:.2f}%")
             else:
-                 metric = self.metrics.get(pid)
-                 if metric is not None:
+                metric = self.metrics.get(pid)
+                if metric is not None:
                     metric.add_data_point(seq, value)
 
-            self.pidValues[pid].append((value, seq))
-            self.mostRecentValues[pid] = (value, seq)
-
-    # fix, to use speed ROC not acc
     def store_gear(self, gear: int):
         with self.lock:
             speed = self.speedMetric.metrics.current
@@ -288,18 +207,10 @@ class Analyser:
                 score -= 1/len(self.metrics) # each out of sequence metric reduces freshness by equal amount
         return max(score, 0.0)
 
-    def get_snapshot(self):
-        return {
-            "metrics": self.metrics,
-            "tripLength" : self.distanceTravelled_km,
-            "tripTime" : time.monotonic() - self.connectionStartTime if self.connectionStartTime else 0,
-            "currentGear": self.currentGear,
-            "freshness": self.calculate_freshness()
-        }
-
     def get_most_recent(self):
         if not self.connected:
             return None
+        
         with self.lock:
             if self.connectionStartTime is None:
                 self.connectionStartTime = time.monotonic()
@@ -308,13 +219,10 @@ class Analyser:
             minutes = int((elapsedTime_s % 3600) // 60)
             seconds = int(elapsedTime_s % 60)
             time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            latestData = {
-                pid: {"value": value, "unit": PIDS[pid].unit}
-                for pid, (value, seq) in self.mostRecentValues.items()
-            }
+
+
             recentEvent = None
             highestPri = -1
-
             for metric in self.metrics.values():
                 if metric.active_events:
                     for event in metric.active_events.values():
@@ -336,89 +244,54 @@ class Analyser:
                 else:
                     self.lastEvent = None
                     self.lastEventEndTime = 0.0
+            
             return {
                 "time": time_str,
                 "distance": f"{self.distanceTravelled_km:.2f}",
-                "latestData": latestData,
                 "rpm" : self.rpmMetric,
                 "speed": self.speedMetric,
+                "temp": self.tempMetric,
+                "volt": self.voltMetric,
                 "event": recentEvent,
                 "fuelCons": self.fuelConsMetric,  
                 "gear": self.currentGear[0],
-                "ratio": self.currentGRatio
+                "ratio": self.currentGRatio,
+                "freshness": self.calculate_freshness()
             }
-
-
-def find_connected_port():
-    ports = list(list_ports.comports())
-
-    # Best match: Raspberry Pi USB VID (0x2E8A)
-    for p in ports:
-        if p.vid == 0x2E8A:
-            return p.device
-
-    # Fallbacks by device naming
-    for p in ports:
-        dev = p.device
-        if dev.startswith("/dev/ttyACM") or dev.startswith("/dev/ttyUSB"):
-            return dev
-        if dev.upper().startswith("COM"):
-            return dev
-    return None
-
-def read_from_com(store):
-    print("Attempting to connect to serial port...")
-
-    while not store.connected:
-        port = find_connected_port()
-        # port = "COM4"
-        if port is None:
-            print("No serial port found. Retrying in 1 second...")
-            sleep(1)
+    
+    def createMetricPoint(self, metric: MetricAnalyser):
+        if not metric.active_events and metric.active_events != {}:
+            priorities = [event.priority for event in metric.active_events.values()]
+            highestPri = max(priorities)
+            eventCount = len(priorities)
         else:
-            ser = serial.Serial(port, 115200)
-            print(f"Connected to serial port: {port}")
-            store.connected = True
-        # try:
-        #     ser = serial.Serial('COM4', 115200)
-        #     print("Connected to serial port.")
-        #     notConnected = False
-        # except serial.SerialException:
-        #     sleep(1)
-    ser.flushInput()
-    log_name = f"data_log_{datetime.now():%Y%m%d_%H%M%S}.csv"
-    with open(log_name, "a") as f:
-        f.write("PID,Data0,Data1,Seq\n")
-        f.flush()
-        while True:
-            line = ser.readline()
-            if line:
-                line = line.decode("utf-8").strip()
-                parts = line.split(',')
-                if (len(parts) == 4):
-                    pid = parts[0]
-                    try: 
-                        data0 = int(parts[1], 16)
-                        data1 = int(parts[2], 16) 
-                        seq = int(parts[3].strip(),10)
-                        f.write(f"{pid},{data0:02X},{data1:02X},{seq}\n")
-                        f.flush()
-                        # print(f"PID: {pid}, Data: {data0:02X} {data1:02X}, Seq: {seq}") 
-                        store.process_packet(pid, data0, data1, seq)
-                    except ValueError:
-                        print(f"Invalid data format")
-            else:
-                print("No data received")
+            highestPri = None
+            eventCount = 0
 
-def read_csv(path, store, sample_rate=16):
-    delay = 1.0 / sample_rate
-    store.connected = True
-    with open('data_log_4.csv', 'r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            pid = row['PID']
-            data0 = int(row['Data0'], 16)
-            data1 = int(row['Data1'], 16)
-            seq = int(row['Seq'])
-            store.process_packet(pid, data0, data1, seq)
-            sleep(delay)
+        m = metric.metrics
+        return MetricPoint(
+            current=m.current if m else None,
+            average=m.average if m else None,
+            wAvgROC=m.wAvgROC if m else None,
+            max=m.max if m else None,
+            min=m.min if m else None,
+            outOfSequence=metric.outOfSequence,
+            eventCount=eventCount,
+            highestPriority=highestPri,
+            allTripAverage=metric.all_trip_average()
+            )
+    
+    def get_snapshot(self) -> TelemetrySnapshot:
+        with self.lock:
+            metricPoints = {pid: self.createMetricPoint(metric) for pid, 
+                            metric in self.metrics.items()
+                            }
+            
+            return TelemetrySnapshot(
+                trip_time_s=(time.monotonic() - self.connectionStartTime) if self.connectionStartTime else 0.0,
+                trip_distance_km=self.distanceTravelled_km,
+                freshness=self.calculate_freshness(),
+                current_gear=self.currentGear[0],
+                gear_ratio=self.currentGRatio,
+                metrics=metricPoints
+            )

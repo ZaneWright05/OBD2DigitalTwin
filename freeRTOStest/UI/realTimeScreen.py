@@ -28,7 +28,15 @@ from kivy.uix.gridlayout import GridLayout
 
 from tachometer import Tachometer
 from topbar import TopBar
-from dataParser import Analyser, read_csv, read_from_com
+
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+from model.dataParser import Parser
+from model.vehicleState import VehicleState
+from IO.input import read_from_com, read_csv
 
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 screen_width_px = 800 # 154.08 mm
@@ -81,11 +89,12 @@ class MetricWidget(BoxLayout):
         self.add_widget(self.label)
 
 class RealTimeScreen(BoxLayout):
-    def __init__(self, analyser, **kwargs):
+    def __init__(self, analyser, vehicleState, **kwargs):
         super().__init__(**kwargs)
 
         self.orientation = 'vertical'
         self.analyser = analyser
+        self.vehicleState = vehicleState
 
         with self.canvas.before:
             Color(0.7, 0.7, 0.7, 1)
@@ -204,6 +213,11 @@ class RealTimeScreen(BoxLayout):
 
     def refresh(self, dt):
         if self.analyser.connected:
+
+            # update vehicle state
+            shadow =self.vehicleState.update(self.analyser.get_snapshot())
+            print(shadow.operational)
+
             state = self.analyser.get_most_recent()
             if state is None:
                 return
@@ -224,11 +238,11 @@ class RealTimeScreen(BoxLayout):
             self.tach.set_target_rpm(rpm)
             self.tach.rpmLabel.text = f"{int(rpm) if rpm is not None else '0'} RPM"
 
-            volt = state["latestData"].get("0x42")
-            self.voltMet.label.text = f"{volt['value']:.2f} V" if volt is not None else "-- V"
+            volt = state["volt"].metrics.current if state["volt"].metrics else None
+            self.voltMet.label.text = f"{volt:.2f} V" if volt is not None else "-- V"
 
-            temp = state["latestData"].get("0x05")
-            self.tempMet.label.text = f"{int(temp['value'])} °C" if temp is not None else "-- °C"
+            temp = state["temp"].metrics.current if state["temp"].metrics else None
+            self.tempMet.label.text = f"{int(temp)} °C" if temp is not None else "-- °C"
 
             fCons = state["fuelCons"]
             self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
@@ -236,6 +250,15 @@ class RealTimeScreen(BoxLayout):
 
             gear = state["gear"]
             self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
+
+            freshness = state["freshness"]
+            if freshness is not None:
+                if freshness > 0.95:
+                    self.topbar.set_connection("high")
+                elif freshness > 0.33:
+                    self.topbar.set_connection("medium")
+                else:
+                    self.topbar.set_connection("low")
 
             event = state["event"]
             if event is None:
@@ -261,11 +284,15 @@ class RealTimeScreen(BoxLayout):
 
 class MyApp(App):
     def build(self):
-        self.analyser = Analyser()
+        self.analyser = Parser()
+        self.vehicleState = VehicleState()
+
         # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
         self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
         self.worker.start()
-        return RealTimeScreen(self.analyser)
+
+    
+        return RealTimeScreen(self.analyser, self.vehicleState)
 
     def on_stop(self):
         print("App is stopping, saving historic metrics...")
