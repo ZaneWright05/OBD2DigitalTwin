@@ -10,3 +10,4 @@ __pycache__/*
 !gear_estim.csv
 historicMetrics.joblib
 gear_model.joblib
+idle_bin.joblib

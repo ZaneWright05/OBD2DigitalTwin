@@ -137,11 +137,13 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Initialize storage for load data
-load_by_seq = {}
+# Initialize storage for coolant temperature data
+coolant_temp_by_seq = {}
+intake_temp_by_seq = {}
 
 # Read the CSV file
 sum = 0
+intSum = 0
 with open("data_log_4.csv", "r", newline="") as f:
     reader = csv.DictReader(f)
     for row in reader:
@@ -149,23 +151,36 @@ with open("data_log_4.csv", "r", newline="") as f:
         data0 = int(row["Data0"], 16)
         seq = int(row["Seq"])
 
-        # Check for load PID (0x04)
-        if pid == "0x04":
-            sum += data0/2.55
-            load_by_seq[seq] = data0/2.55  # Store raw load data
+        
+        if pid == "0x0C": # RPM, can be used to check if engine is on for temp analysis
+            rpm = ((data0 * 256) + int(row["Data1"], 16)) / 4.0
+            sum += rpm
+            coolant_temp_by_seq[seq] = rpm  # Store raw coolant temperature data
 
-print(f"Average Load: {sum / len(load_by_seq):.2f} %")
+        # if pid == "0x0F":
+        #     intake_temp_by_seq[seq] = data0 - 40  # Store raw intake temperature data
+        #     intSum += data0 - 40
 
+print(f"Average Coolant Temperature: {sum / len(coolant_temp_by_seq):.2f} °C")
+print(f"Min Coolant Temperature: {min(coolant_temp_by_seq.values()):.2f} °C")
+print(f"Max Coolant Temperature: {max(coolant_temp_by_seq.values()):.2f} °C")
+
+# print(f"Average Intake Temperature: {intSum / len(intake_temp_by_seq):.2f} °C")
+# print(f"Min Intake Temperature: {min(intake_temp_by_seq.values()):.2f} °C")
+# print(f"Max Intake Temperature: {max(intake_temp_by_seq.values()):.2f} °C")
 # Sort the data by sequence number
-sorted_seq = sorted(load_by_seq.keys())
-temperatures = [load_by_seq[seq] for seq in sorted_seq]
+sorted_seq = sorted(coolant_temp_by_seq.keys())
+temperatures = [coolant_temp_by_seq[seq] for seq in sorted_seq]
 
+# sorted_IntSeq = sorted(intake_temp_by_seq.keys())
+# int_temperatures = [intake_temp_by_seq[seq] for seq in sorted_IntSeq]
 # Plot the temperature over time
 plt.figure(figsize=(10, 6))
-plt.plot(sorted_seq, temperatures, label="Load (%)", color="blue")
+plt.plot(sorted_seq, temperatures, label="Coolant Temperature (°C)", color="blue")
+# plt.plot(sorted_IntSeq, int_temperatures, label="Intake Temperature (°C)", color="orange")
 plt.xlabel("Sequence Number")
-plt.ylabel("Load (%)")
-plt.title("Engine Load Over Time")
+plt.ylabel("Coolant Temperature (°C)")
+plt.title("Engine Coolant Temperature Over Time")
 plt.grid(alpha=0.3)
 plt.legend()
 plt.tight_layout()

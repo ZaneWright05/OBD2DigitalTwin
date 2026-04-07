@@ -127,6 +127,16 @@ class MetricAnalyser:
             return self.metrics.average
         return 0.0
 
+    def all_trip_wAvgROC(self):
+        if self.historicMetrics and self.historicMetrics.tripCount > 0:
+            if(self.metrics.wAvgROC == 0): # if no current data, return historic average
+                return self.historicMetrics.wAvgROC
+            else:
+                return (self.metrics.wAvgROC + ( self.historicMetrics.wAvgROC *  self.historicMetrics.tripCount)) / (1 + self.historicMetrics.tripCount)
+                # current ave * 1 + historic ave * trips / 1 + trip count - average over all trips
+        elif (self.metrics.wAvgROC != 0):
+            return self.metrics.wAvgROC
+        return 0.0
 
     def add_data_point(self, seq, value):
         if value is None:

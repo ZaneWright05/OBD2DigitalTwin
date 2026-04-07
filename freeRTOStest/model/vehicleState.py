@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from model.metricAnalyser import Metrics
 from model.dataParser import Parser
 from model.helpers import MetricPoint, TelemetrySnapshot
+from model.operationalState import OperationalState
+from model.powertrainState import PowerTrainState
 
 @dataclass
 class VehicleStateModel:
@@ -17,6 +19,8 @@ class VehicleStateModel:
 class VehicleState:
     def __init__(self):
         self.snapshot = None
+        self.operationalState = OperationalState()
+        self.powertrainState = PowerTrainState()
 
         self.current = VehicleStateModel(
             operational='Unknown',
@@ -27,53 +31,42 @@ class VehicleState:
             confidence=0.0,
             reason=''
         )
-        # self.speed = None
-        # self.rpm = None
-        # self.fuelCons = None
-        # self.engineLoad = None
-        # self.intakeTemp = None
-        # self.coolantTemp = None
-        # self.torque = None
-        # self.gear = None
-
-
-# need an anlyser so we can call get snapshot
-# will create the operation state first 
-# speed and rpm used here '
-# cruisng, accelerating, decelerating, idling, off
-    def operationalState(self):
-        if self.snapshot is None:
-            return 'Unknown'
-        speedMetric = self.snapshot.metrics.get("0x0D")
-        rpmMetric = self.snapshot.metrics.get("0x0C")
-
-        if speedMetric is None or rpmMetric is None:
-            return 'Unknown'
-
-        speedVal = speedMetric.current
-        rpmVal = rpmMetric.current
-        accVal = speedMetric.wAvgROC
-
-        if speedVal == 0 and rpmVal == 0:
-            return 'Stopped'
-        ## intend to add data based rpm range, d points with speed = 0, low thrttle and varying temp
-        elif speedVal == 0 and rpmVal < 1000:
-            return 'Idling'
+    
         
-        elif abs(accVal) < 0.5 and rpmVal >= 800 and rpmVal < 3000: ## want to improve 
-            return 'Cruising'
-        elif accVal > 0:
-            return 'Accelerating'
-        elif accVal < 0:
-            return 'Decelerating'
-        return 'Unknown'
+        self.lastChange_s = 0.0
+        self.holdTime_s = 1.0
+
+    def getOpState(self):
+        state = self.operationalState.get_state(
+            rpm=self.snapshot.metrics['0x0C'],
+            speed=self.snapshot.metrics['0x0D'],
+            throttle=self.snapshot.metrics['0x11'],
+            temp=self.snapshot.metrics['0x05']
+        )
+        return state
+
+    def getPowerTrainState(self):
+        state = self.powertrainState.get_state(
+            gear=self.snapshot.current_gear,
+            gearRatio=self.snapshot.gear_ratio,
+            load=self.snapshot.metrics['0x04'],
+            throttle=self.snapshot.metrics['0x11'],
+            rpm=self.snapshot.metrics['0x0C']
+        )
+        return state
 
     def update(self, snapshot: TelemetrySnapshot) -> VehicleStateModel:
         self.snapshot = snapshot
-        self.current.operational = self.operationalState()
-        self.current.freshness = snapshot.freshness
-        self.current.reason = (
-            f"speed={snapshot.metrics['0x0D'].current:.1f}, "
-            f"rpm={snapshot.metrics['0x0C'].current:.0f}"
-        )
+        if snapshot.metrics["0x11"].allTripMin is None:
+            if snapshot.metrics["0x11"].min is not None:
+                snapshot.metrics["0x11"].allTripMin = snapshot.metrics["0x11"].min
+            else:
+                snapshot.metrics["0x11"].allTripMin = 20 # no data 20% min throttle
+        self.current.operational = self.getOpState()
+        self.current.powertrain = self.getPowerTrainState()
+        self.current.confidence = 0.0 # placeholder
+        # self.current.reason = (
+        #     f"speed={snapshot.metrics['0x0D'].current:.1f}, "
+        #     f"rpm={snapshot.metrics['0x0C'].current:.0f}"
+        # )
         return self.current

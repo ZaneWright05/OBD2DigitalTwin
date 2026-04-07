@@ -13,6 +13,11 @@ class MetricPoint:
     highestPriority: int | None
     allTripAverage: float
 
+    allTripMin: float | None = None
+    allTripMax: float | None = None
+    allTripAverageROC: float | None = None
+    tripCount: int = 0
+
 @dataclass
 class TelemetrySnapshot:
     trip_time_s: float
@@ -31,14 +36,11 @@ class pid:
     period_ms: int
 
 PIDS = {
-    # need to add engine load to the design
     "0x0C": pid("RPM", 2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
     "0x0D": pid("Speed", 1, "kmh", lambda a,b: a, 333),
 
     "0x11": pid("Throttle", 1, "%", lambda a,b: (a * 100)/255, 500),
     "0x05": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
-
-    ## might be included in data?
     "0x04": pid("Engine Load", 1, "%", lambda a,b: (a * 100)/255, 500),
 
     "0x10": pid("Mass Air Flow", 2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),

@@ -245,6 +245,8 @@ class Parser:
                     self.lastEvent = None
                     self.lastEventEndTime = 0.0
             
+            # print(self.rpmMetric.metrics.wAvgROC)
+
             return {
                 "time": time_str,
                 "distance": f"{self.distanceTravelled_km:.2f}",
@@ -269,6 +271,7 @@ class Parser:
             eventCount = 0
 
         m = metric.metrics
+        hist = metric.historicMetrics
         return MetricPoint(
             current=m.current if m else None,
             average=m.average if m else None,
@@ -278,7 +281,13 @@ class Parser:
             outOfSequence=metric.outOfSequence,
             eventCount=eventCount,
             highestPriority=highestPri,
-            allTripAverage=metric.all_trip_average()
+
+            ## historic metrics
+            allTripAverage=metric.all_trip_average(),
+            allTripMin=hist.min if hist else None,
+            allTripMax=hist.max if hist else None,
+            allTripAverageROC=metric.all_trip_wAvgROC() if hist else None,
+            tripCount=hist.tripCount if hist else 0
             )
     
     def get_snapshot(self) -> TelemetrySnapshot:

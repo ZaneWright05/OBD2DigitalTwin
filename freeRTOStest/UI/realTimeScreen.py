@@ -216,7 +216,7 @@ class RealTimeScreen(BoxLayout):
 
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
-            print(shadow.operational)
+            print(shadow.powertrain)
 
             state = self.analyser.get_most_recent()
             if state is None:
@@ -288,7 +288,7 @@ class MyApp(App):
         self.vehicleState = VehicleState()
 
         # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 256), daemon=True)
+        self.worker = Thread(target=read_csv, args=("", self.analyser, 64), daemon=True)
         self.worker.start()
 
     
