@@ -18,7 +18,7 @@ class PowerTrainState:
         score = 0.0
         if (gear is None or gear == 0) and rpm > minRpm: # check enif is on
             score = 0.5
-            if rpm < minRpm * 1.4: # low rpm in neutral
+            if rpm < minRpm * 1.25: # low rpm in neutral
                 score += 0.3
             if gear == 0: 
                 score += 0.1
@@ -57,7 +57,7 @@ class PowerTrainState:
             score += 0.5
         if load <= 0.2:
             score += 0.1
-        if rpmROC < 0: # engine speed slowing
+        if rpmROC < -0.25: # engine speed slowing
             score += 0.1
         if gear:
             score += 0.1

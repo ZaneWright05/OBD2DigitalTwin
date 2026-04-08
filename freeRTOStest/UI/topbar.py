@@ -4,6 +4,7 @@ from kivy.graphics import Color, Rectangle, Line, RoundedRectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.button import Button
 
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -62,6 +63,12 @@ class TopBar(BoxLayout):
         )
         self.rightContent.bind(minimum_width=self.rightContent.setter('width'))
 
+        self.tripButton = Button(
+            text="Start Trip",
+            size_hint=(None, 1),
+            width=90,
+        )
+
         self.roadImg = Image(
             source=os.path.join(imgDir, "road.png"),
             size_hint=(None, 1),
@@ -97,6 +104,8 @@ class TopBar(BoxLayout):
         )
         self.timeLabel.bind(size=lambda w, _: setattr(w, 'text_size', w.size))
 
+
+        self.rightContent.add_widget(self.tripButton)
         self.rightContent.add_widget(self.roadImg)
         self.rightContent.add_widget(self.distLabel)
         self.rightContent.add_widget(self.timerImg)

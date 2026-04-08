@@ -7,14 +7,15 @@
 #include "queue.h"
 #include "CAN/CAN_DEV_Config.h"
 #include "CAN/MCP2515.h"
-//#include "tusb.h"
-//#include "class/cdc/cdc_device.h"
+#include "hardware/watchdog.h"
 
 #define RPM_VEH_SPEED_PERIOD_MS 333
 #define THRTL_COOLANT_LOAD_PERIOD_MS 500
 #define MAF_CTRL_VOLT_PERIOD_MS 1000
 #define INTAKE_FUEL_PRESS_PERIOD_MS 2000
 #define RUNTIME_SINCE_ENG_START_PERIOD_MS 4000
+#define START_SIGNAL 'S'
+#define STOP_SIGNAL 'X'
 
 StaticTask_t RPM_VEH_SPEED_task_p;
 StackType_t RPM_VEH_SPEED_stack[256];
@@ -42,6 +43,9 @@ typedef struct __attribute__((packed)) { // esure struct is exactly 7 bytes
 } QueueEntry;
 
 queue_t dataQueue;
+volatile bool hostConnected = false;
+volatile bool tripStarted = false;
+
 
 // uint8_t ucQueueStorageArea[ 256 * sizeof(QueueEntry) ];
 
@@ -185,47 +189,91 @@ void add_To_Queue(uint8_t pid, PIDValue pidValue, uint32_t seqNum){
     queue_add_blocking(&dataQueue, &entry); 
 }
 
+void clear_Queue(){
+    QueueEntry entry = {0};
+    while(queue_get_level(&dataQueue) > 0){
+        queue_remove_blocking(&dataQueue, &entry);
+        printf("0x%02X,0x%02X,0x%02X,%u\n", entry.pid, entry.data[0], entry.data[1], entry.seqNum);
+    }
+}
+
+// on queue full remove oldest entry
+int timeOutCounter = 256;
+void maintain_Queue(){
+    QueueEntry entry = {0};
+    while(queue_is_full(&dataQueue) && timeOutCounter > 0){
+        queue_remove_blocking(&dataQueue, &entry);
+        // printf("0x%02X,0x%02X,0x%02X,%u\n", entry.pid, entry.data[0], entry.data[1], entry.seqNum);
+        timeOutCounter--;
+    }
+}
+
+int getMaxPeriod(){
+    int max = RPM_VEH_SPEED_PERIOD_MS;
+    if(THRTL_COOLANT_LOAD_PERIOD_MS > max){
+        max = THRTL_COOLANT_LOAD_PERIOD_MS;
+    }
+    if(MAF_CTRL_VOLT_PERIOD_MS > max){
+        max = MAF_CTRL_VOLT_PERIOD_MS;
+    }
+    if(INTAKE_FUEL_PRESS_PERIOD_MS > max){
+        max = INTAKE_FUEL_PRESS_PERIOD_MS;
+    }
+    if(RUNTIME_SINCE_ENG_START_PERIOD_MS > max){
+        max = RUNTIME_SINCE_ENG_START_PERIOD_MS;
+    }
+
+    return max;
+}
+
+void MCU_reset(){
+    tripStarted = false;
+
+    sleep_ms(getMaxPeriod()); // wait for longest task so all tasks finish
+
+    clear_Queue(); // clear the queue to avoid old data being printed when trip starts again
+
+    watchdog_reboot(0, 0, 0); // reset the MCU
+
+    while(1){
+        tight_loop_contents();
+    }
+}
+
 void pop_From_Queue(){
    // int cntr = 0;
     QueueEntry entry = {0};
     while(1){
-        // tud_task();
-        // if(tud_cdc_connected()){
-            if(queue_get_level(&dataQueue) > 0){
-                queue_remove_blocking(&dataQueue, &entry);
-                printf("0x%02X,0x%02X,0x%02X,%u\n", entry.pid, entry.data[0], entry.data[1], entry.seqNum);
-               // printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
-                //printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
-                //  uint8_t frame[8];
-        // frame[0] = 0xAA;           // start byte
-        // frame[1] = entry.pid;
-        // frame[2] = entry.data[0];
-        // frame[3] = entry.data[1];
-
-        // // Serialize uint32_t seqNum (little-endian)
-        // frame[4] = (entry.seqNum >> 0) & 0xFF;
-        // frame[5] = (entry.seqNum >> 8) & 0xFF;
-        // frame[6] = (entry.seqNum >> 16) & 0xFF;
-        // frame[7] = (entry.seqNum >> 24) & 0xFF;
-        //tud_cdc_write(frame, sizeof(frame));
-        //tud_cdc_write_flush();
-            // }
-        }
-       // printf("Waiting to pop from queue...\n");
-        //BaseType_t res = xQueueReceive(dataQueue, &entry, 0);
-       // printf("Pop attempt %d\n", cntr++);
-        // //if(res == pdPASS){
-        //     printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
-        //     printf("Number of items in queue: %u\n", uxQueueMessagesWaiting(dataQueue));
-        // }else{
-        //     printf("Queue is empty, nothing to pop\n");
-        //     sleep_ms(100);
+        // if(!stdio_usb_connected()){
+        //     hostConnected = false;
+        //     if(!tripStarted){ // trip has been stopped 
+        //         clear_Queue();
+        //         // tripStarted = false;
+        //     } else{ // maintain queue with hope it reconnects
+        //         if(timeOutCounter <= 0){ // timeout reached, stop the trip and clear the queue
+        //             // stop the trip and all tasks
+        //             clear_Queue();
+        //             tripStarted = false;
+        //             timeOutCounter = 256;  
+        //             // vTaskSuspendAll(); 
+        //         }
+        //         maintain_Queue();
+        //     }
+        //     // sleep_ms(100);
         //     continue;
-        // }
-       // queue_remove_blocking(&dataQueue, &entry);
-       // printf("Popped from Queue - PID: 0x%02X, SeqNum: %u, Data: 0x%02X 0x%02X\n", entry.pid, entry.seqNum, entry.data[0], entry.data[1]);
-        //printf("Number of items in queue: %u\n", queue_get_level(&dataQueue));
-        sleep_ms(25);
+        // } else{
+
+        // 
+        int ch = getchar_timeout_us(0);
+        if(ch == STOP_SIGNAL){
+            MCU_reset();
+        }
+
+        if(queue_get_level(&dataQueue) > 0){
+            queue_remove_blocking(&dataQueue, &entry);
+            printf("0x%02X,0x%02X,0x%02X,%u\n", entry.pid, entry.data[0], entry.data[1], entry.seqNum);
+            sleep_ms(25);
+        }
     }
 }
 
@@ -267,6 +315,11 @@ void rpm_veh_task(void *params)
     TickType_t nextRelease = xTaskGetTickCount();
     while (1)
     {
+        if (!tripStarted) {
+            gpio_put(task_PIN, 0);
+            vTaskDelayUntil(&nextRelease, period_ticks);
+            continue;
+        }
         gpio_put(task_PIN, 1);
         uint8_t rpmSpeedReply[8] = {0};
         CAN_transmission(rpmSpeedFrame, rpmSpeedReply);
@@ -289,6 +342,11 @@ void thrttl_coolant_load_task(void *params)
     TickType_t nextRelease = xTaskGetTickCount();
     for (;;) 
     {
+        if (!tripStarted) {
+            gpio_put(task_PIN, 0);
+            vTaskDelayUntil(&nextRelease, period_ticks);
+            continue;
+        }
         gpio_put(task_PIN, 1);
         uint8_t thrtlIntkLdReply[8] = {0};
         CAN_transmission(thrtlIntkLdFrame, thrtlIntkLdReply);
@@ -308,6 +366,11 @@ void maf_ctrl_volt_task(void* params){
     uint8_t MAFVoltFrame[8] = {0x03, 0x01, 0x10, 0x42,0x00, 0x00, 0x00, 0x00};
     TickType_t nextRelease = xTaskGetTickCount();
     for(;;){
+        if (!tripStarted) {
+            gpio_put(task_PIN, 0);
+            vTaskDelayUntil(&nextRelease, period_ticks);
+            continue;
+        }
         gpio_put(task_PIN, 1);
         uint8_t MAFVoltReply[8] = {0};
         CAN_transmission(MAFVoltFrame, MAFVoltReply);
@@ -328,6 +391,11 @@ void intake_fuel_press_task(void* params){
     uint8_t intakeFuelRlFrame[8] = {0x03, 0x01, 0x0F, 0x23,0x00, 0x00, 0x00, 0x00};
     TickType_t nextRelease = xTaskGetTickCount();
     for(;;){
+        if (!tripStarted) {
+            gpio_put(task_PIN, 0);
+            vTaskDelayUntil(&nextRelease, period_ticks);
+            continue;
+        }
         gpio_put(task_PIN, 1);
         uint8_t intakeFuelRlReply[8] = {0};
         CAN_transmission(intakeFuelRlFrame, intakeFuelRlReply);
@@ -348,6 +416,11 @@ void rt_since_strt_task(void* params){
     uint8_t rtStrtFrame [8] = {0x02, 0x01, 0x1F, 0x00,0x00, 0x00, 0x00, 0x00};// run time since engine start
     TickType_t nextRelease = xTaskGetTickCount();
     for(;;){
+        if (!tripStarted) {
+            gpio_put(task_PIN, 0);
+            vTaskDelayUntil(&nextRelease, period_ticks);
+            continue;
+        }
         gpio_put(task_PIN, 1);
         uint8_t rtStrtReply [8] = {0};
         CAN_transmission(rtStrtFrame, rtStrtReply);
@@ -361,9 +434,21 @@ void rt_since_strt_task(void* params){
 int main()
 {
     stdio_init_all();
-    while(!stdio_usb_connected());
+    // while(!stdio_usb_connected());
     CAN_DEV_Module_Init();
     MCP2515_Init();
+
+    // wait for host start signal
+    while(1){
+        if(!stdio_usb_connected()){
+            continue;
+        }
+        int input = getchar_timeout_us(100000); // wait for 100ms for input
+        if(input == START_SIGNAL){
+            tripStarted = true;
+            break;
+        }
+    }
 
     // tusb_init();
     //dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);

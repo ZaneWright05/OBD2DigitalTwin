@@ -90,6 +90,7 @@ target_link_libraries(freeRTOStest
         hardware_exception
         hardware_irq
         hardware_sync
+        hardware_watchdog
         pico_multicore
         pico_util
 
