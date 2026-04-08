@@ -179,7 +179,7 @@ class RealTimeScreen(BoxLayout):
         self.content.add_widget(constUnitLabel2)
 
         self.driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
-        self.driverTitle.pos=(self.driverTitle.width/2.5, 165 - self.driverTitle.height/2)
+        self.driverTitle.pos=(self.driverTitle.width/2.5, 165 - self.driverTitle.height)
 
         self.content.add_widget(self.driverTitle)
 
@@ -187,6 +187,9 @@ class RealTimeScreen(BoxLayout):
         button2 = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
         button3 = Button(text="History", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
         button4 = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
+
+
+        self._last_trip_btn_press_s = 0.0
 
         for btn in [button1, button2, button3, button4]:
             btn.background_normal = ''
@@ -209,8 +212,11 @@ class RealTimeScreen(BoxLayout):
         Clock.schedule_interval(self.refresh, 0.1)
 
     def stop_start_button_handler(self):
-        if self.analyser.tripStartTime and time() - self.analyser.tripStartTime < 1: # prevent accoidental double presses
+        now = time()
+        if (now - self._last_trip_btn_press_s) < 0.35:
             return
+        self._last_trip_btn_press_s = now
+        
         if self.analyser.connected:
             if self.analyser.running:
                 if(self.analyser.stop_trip()):    
