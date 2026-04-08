@@ -6,13 +6,27 @@ import joblib
 from model.gear_estimate import GearEstimator
 from model.metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
 from model.helpers import pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
+from IO.input import attempt_serial_connection, read_csv, read_packet
+from enum import Enum, auto
+
+class ConnectionState(Enum):
+    DISCONNECTED = auto()
+    CONNECTED = auto()
+    ACTIVE_TRIP = auto()
+
+
 
 class Parser:
     def __init__(self):
         self.lock = threading.Lock()
-        
-        self.connected = False
-        self.connectionStartTime = None # for the timer
+        self.worker = None # thread to get data
+
+
+        self.state = ConnectionState.DISCONNECTED
+        self.serial = None
+        self.stop = threading.Event()
+
+        self.tripStartTime = None # for the timer
         self.distanceTravelled_km = 0.0
 
         if os.path.exists("historicMetrics.joblib"):
@@ -90,9 +104,9 @@ class Parser:
         self.currentGRatio = None
 
     def save_HistoricMetrics(self):
-        if self.connectionStartTime is None:
+        if self.tripStartTime is None:
             return
-        if (time.monotonic() - self.connectionStartTime < 300):
+        if (time.monotonic() - self.tripStartTime < 300):
             print("Trip too short (< 5 minutes), not saving historic metrics...")
             return
         history_payload = {
@@ -212,9 +226,9 @@ class Parser:
             return None
         
         with self.lock:
-            if self.connectionStartTime is None:
-                self.connectionStartTime = time.monotonic()
-            elapsedTime_s = time.monotonic() - self.connectionStartTime  
+            if self.tripStartTime is None:
+                self.tripStartTime = time.monotonic()
+            elapsedTime_s = time.monotonic() - self.tripStartTime  
             hours = int(elapsedTime_s // 3600)
             minutes = int((elapsedTime_s % 3600) // 60)
             seconds = int(elapsedTime_s % 60)
@@ -297,10 +311,110 @@ class Parser:
                             }
             
             return TelemetrySnapshot(
-                trip_time_s=(time.monotonic() - self.connectionStartTime) if self.connectionStartTime else 0.0,
+                trip_time_s=(time.monotonic() - self.tripStartTime) if self.tripStartTime else 0.0,
                 trip_distance_km=self.distanceTravelled_km,
                 freshness=self.calculate_freshness(),
                 current_gear=self.currentGear[0],
                 gear_ratio=self.currentGRatio,
                 metrics=metricPoints
             )
+
+    
+    @property
+    def connected(self):
+        return self.serial is not None and self.serial.is_open
+
+    @property
+    def running(self):
+        return self.state == ConnectionState.ACTIVE_TRIP
+
+    def start_trip(self):
+        if self.state != ConnectionState.CONNECTED or not self.connected:
+            return False
+        try:
+            self.serial.write(b"S\n")
+            self.serial.flush()
+            self.state = ConnectionState.ACTIVE_TRIP
+            self.tripStartTime = time.monotonic()
+            self.distanceTravelled_km = 0.0
+            return True
+        except Exception as e:
+            print(f"Exception while sending start command: {e}")
+            self.state = ConnectionState.DISCONNECTED
+            return False
+
+    def stop_trip(self):
+        if self.state != ConnectionState.ACTIVE_TRIP:
+            return False
+        
+        self.state = ConnectionState.DISCONNECTED
+        
+        try:
+            if self.connected:
+                self.serial.write(b"X\n")
+                self.serial.flush()
+                # time.sleep(4) # wait for final packets
+        except Exception as e:
+            # print(f"Exception while sending stop command: {e}")
+            pass
+
+        self.save_HistoricMetrics()
+        return True
+
+    def run_com_loop(self):
+        while self.connected and not self.stop.is_set():
+            try:
+                packet = read_packet(self.serial)
+            except Exception as e:
+                print(f"Serial disconnected: {e}")
+                self.state = ConnectionState.DISCONNECTED
+                return "disconnected"
+            
+            if packet is None:
+                continue
+            
+            pid, data0, data1, seq = packet
+            self.process_packet(pid, data0, data1, seq)
+        return "stopped"
+
+
+    def select_mode(self, mode="serial", csv_path="", sample_rate=64):
+        if mode != "serial":
+            read_csv(csv_path, self, sample_rate)
+            return
+
+        while not self.stop.is_set():
+            self.serial = attempt_serial_connection()
+            if self.serial is None:
+                print("No serial connection.")
+                self.state = ConnectionState.DISCONNECTED
+                time.sleep(1)
+                continue
+
+            self.state = ConnectionState.CONNECTED
+            self.run_com_loop()
+
+            try:
+                if self.serial is not None and self.serial.is_open:
+                    self.serial.close()
+            except Exception:
+                pass
+
+            self.serial = None
+            self.state = ConnectionState.DISCONNECTED
+            time.sleep(0.5)
+
+    def start_parsing(self, mode="serial", csv_path="", sample_rate=64):
+        if self.worker is not None and self.worker.is_alive():
+            print("Data parsing is already running.")
+            return
+        self.worker = threading.Thread(
+            target=self.select_mode,
+            kwargs={
+                "mode": mode,
+                "csv_path": csv_path,
+                "sample_rate": sample_rate
+            },
+            daemon=True
+        )
+        self.worker.start()

@@ -36,7 +36,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from model.dataParser import Parser
 from model.vehicleState import VehicleState
-from IO.input import read_from_com, read_csv
 
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 screen_width_px = 800 # 154.08 mm
@@ -104,7 +103,7 @@ class RealTimeScreen(BoxLayout):
 
         self.topbar = TopBar()
         self.add_widget(self.topbar)
-
+        self.topbar.tripButton.bind(on_press=lambda _: self.stop_start_button_handler())
         self.content = Widget()
 
         gearBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(185, 390), pos=(610,0))
@@ -208,11 +207,22 @@ class RealTimeScreen(BoxLayout):
         self.add_widget(self.content)
         Clock.schedule_interval(self.refresh, 0.1)
 
+    def stop_start_button_handler(self):
+        if self.analyser.connected:
+            if self.analyser.running:
+                if(self.analyser.stop_trip()):    
+                    self.topbar.tripButton.text = "Start Trip"
+                    self.set_event_text("Trip stopped, saving data...")
+            else:
+                if(self.analyser.start_trip()):
+                    self.topbar.tripButton.text = "Stop Trip"
+                    self.set_event_text("Trip started, collecting data...")
+
     def set_event_text(self, msg):
         self.topbar.eventLabel.text = msg
 
     def refresh(self, dt):
-        if self.analyser.connected:
+        if self.analyser.connected and self.analyser.running:
 
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
@@ -287,9 +297,8 @@ class MyApp(App):
         self.analyser = Parser()
         self.vehicleState = VehicleState()
 
-        # self.worker = Thread(target=read_from_com, args=(self.analyser,), daemon=True)
-        self.worker = Thread(target=read_csv, args=("", self.analyser, 64), daemon=True)
-        self.worker.start()
+        self.analyser.start_parsing(mode="serial")
+        # self.analyser.start_parsingd(mode="csv", csv_path="", sample_rate=64)
 
     
         return RealTimeScreen(self.analyser, self.vehicleState)

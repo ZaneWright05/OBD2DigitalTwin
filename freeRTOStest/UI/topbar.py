@@ -161,7 +161,7 @@ class TopBar(BoxLayout):
         self.border.rectangle = (self.x, self.y, self.width, self.height)
 
     def update_event_pill(self, *args):
-        fixed_w = 340
+        fixed_w = 250
         h = self.height - 6
         if self.eventLabel.size != (fixed_w, h):
             self.eventLabel.size = (fixed_w, h)
