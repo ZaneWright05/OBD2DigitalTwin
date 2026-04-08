@@ -1,8 +1,10 @@
 # gear, ratio, engine load, throttle, rpm
 
-from model.helpers import MetricPoint
+from model.helpers import MetricPoint, TelemetrySnapshot
 from time import time
-class PowerTrainState:
+from model.shadowState import ShadowState
+
+class PowerTrainState(ShadowState):
     def __init__(self):
         self.state = "Unknown"
         self.confidence = 0.0
@@ -14,6 +16,12 @@ class PowerTrainState:
         self.unknownCount = 0
         self.unknownLimit = 3
     
+    def reset_trip(self):
+        self.state = "Unknown"
+        self.confidence = 0.0
+        self.stateStartTime = time()
+        self.unknownCount = 0
+
     def gen_neutral_score(self, gear, rpm, minRpm) -> float:
         score = 0.0
         if (gear is None or gear == 0) and rpm > minRpm: # check enif is on
@@ -72,7 +80,7 @@ class PowerTrainState:
         return score
 
 
-    def estimate_state(self, gear, gearRatio, load, throttle, minThrottle, rpm, rpmROC) -> tuple[str, float]:
+    def estimate_state(self, gear, load, throttle, minThrottle, rpm, rpmROC) -> tuple[str, float]:
         # histThrottleMin = throttle.allTripMin if throttle.allTripMin is not None else 20.0
         
         states = {"NeutralIdle": self.gen_neutral_score(gear, rpm, minThrottle), # engine on, no power delivery
@@ -90,9 +98,13 @@ class PowerTrainState:
 
         return maxState, maxScore
 
-    def get_state(self,  gear, gearRatio, load:MetricPoint, throttle: MetricPoint, rpm: MetricPoint) -> str:
+    def get_state(self, snapshot: TelemetrySnapshot) -> str:
+        gear = snapshot.current_gear
+        load = snapshot.metrics['0x10']
+        throttle = snapshot.metrics['0x11']
+        rpm = snapshot.metrics['0x0C']
 
-        newState, newConf = self.estimate_state(gear, gearRatio, load.current, throttle.current, throttle.allTripMin, rpm.current, rpm.wAvgROC)
+        newState, newConf = self.estimate_state(gear, load.current, throttle.current, throttle.allTripMin, rpm.current, rpm.wAvgROC)
         now = time()
         
         if newState == self.state: # update confidence if same state

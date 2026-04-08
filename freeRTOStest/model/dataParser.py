@@ -14,8 +14,6 @@ class ConnectionState(Enum):
     CONNECTED = auto()
     ACTIVE_TRIP = auto()
 
-
-
 class Parser:
     def __init__(self):
         self.lock = threading.Lock()
@@ -318,7 +316,6 @@ class Parser:
                 gear_ratio=self.currentGRatio,
                 metrics=metricPoints
             )
-
     
     @property
     def connected(self):
@@ -328,15 +325,29 @@ class Parser:
     def running(self):
         return self.state == ConnectionState.ACTIVE_TRIP
 
+    def reset_trip(self):
+        with self.lock:
+            for metric in self.metrics.values():
+                metric.reset_runtime()
+
+            self.currentGear = (None, None)
+            self.currentGRatio = None
+            self.lastEvent = None
+            self.lastEventEndTime = 0.0
+
+            self.tripStartTime = time.monotonic()
+            self.distanceTravelled_km = 0.0
+
     def start_trip(self):
         if self.state != ConnectionState.CONNECTED or not self.connected:
             return False
         try:
+            self.reset_trip()
+
             self.serial.write(b"S\n")
             self.serial.flush()
+
             self.state = ConnectionState.ACTIVE_TRIP
-            self.tripStartTime = time.monotonic()
-            self.distanceTravelled_km = 0.0
             return True
         except Exception as e:
             print(f"Exception while sending start command: {e}")

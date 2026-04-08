@@ -36,6 +36,7 @@ class TopBar(BoxLayout):
         )
         self.leftImgs.bind(minimum_width=self.leftImgs.setter('width'))
 
+        self.connectionState = False
         self.connectionImg = Image(
             source=os.path.join(imgDir, "disconnected.png"),
             size_hint=(None, None),
@@ -145,7 +146,7 @@ class TopBar(BoxLayout):
         self.add_widget(Widget(size_hint=(1, 1)))
         self.add_widget(self.rightContent)
 
-    def set_connection(self, level):
+    def set_signal(self, level):
         if level == "low":
             self.signalImg.source = os.path.join(imgDir, "lowConnection.png")
         elif level == "medium":
@@ -154,6 +155,13 @@ class TopBar(BoxLayout):
             self.signalImg.source = os.path.join(imgDir, "highConnection.png")
         else:
             print("No conn img")
+
+    def set_connection(self, status: bool):
+        self.connectionState = status
+        if status:
+            self.connectionImg.source = os.path.join(imgDir, "connected.png")
+        else:
+            self.connectionImg.source = os.path.join(imgDir, "disconnected.png")
 
     def update_rect(self, *args):
         self.rect.pos = self.pos

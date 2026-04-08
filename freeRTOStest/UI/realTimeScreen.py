@@ -215,6 +215,7 @@ class RealTimeScreen(BoxLayout):
                     self.set_event_text("Trip stopped, saving data...")
             else:
                 if(self.analyser.start_trip()):
+                    self.vehicleState.reset_state()
                     self.topbar.tripButton.text = "Stop Trip"
                     self.set_event_text("Trip started, collecting data...")
 
@@ -222,11 +223,13 @@ class RealTimeScreen(BoxLayout):
         self.topbar.eventLabel.text = msg
 
     def refresh(self, dt):
-        if self.analyser.connected and self.analyser.running:
+        if self.analyser.connected != self.topbar.connectionState:
+            self.topbar.set_connection(self.analyser.connected)
 
+        if self.analyser.connected and self.analyser.running:
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
-            print(shadow.powertrain)
+        #    print(shadow.powertrain)
 
             state = self.analyser.get_most_recent()
             if state is None:
@@ -264,11 +267,11 @@ class RealTimeScreen(BoxLayout):
             freshness = state["freshness"]
             if freshness is not None:
                 if freshness > 0.95:
-                    self.topbar.set_connection("high")
+                    self.topbar.set_signal("high")
                 elif freshness > 0.33:
-                    self.topbar.set_connection("medium")
+                    self.topbar.set_signal("medium")
                 else:
-                    self.topbar.set_connection("low")
+                    self.topbar.set_signal("low")
 
             event = state["event"]
             if event is None:

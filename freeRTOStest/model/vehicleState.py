@@ -36,24 +36,18 @@ class VehicleState:
         self.lastChange_s = 0.0
         self.holdTime_s = 1.0
 
-    def getOpState(self):
-        state = self.operationalState.get_state(
-            rpm=self.snapshot.metrics['0x0C'],
-            speed=self.snapshot.metrics['0x0D'],
-            throttle=self.snapshot.metrics['0x11'],
-            temp=self.snapshot.metrics['0x05']
+    def reset_state(self):
+        self.current = VehicleStateModel(
+            operational='Unknown',
+            powertrain='Unknown',
+            thermal='Unknown',
+            efficiency='Unknown',
+            health='Unknown',
+            confidence=0.0,
+            reason=''
         )
-        return state
-
-    def getPowerTrainState(self):
-        state = self.powertrainState.get_state(
-            gear=self.snapshot.current_gear,
-            gearRatio=self.snapshot.gear_ratio,
-            load=self.snapshot.metrics['0x04'],
-            throttle=self.snapshot.metrics['0x11'],
-            rpm=self.snapshot.metrics['0x0C']
-        )
-        return state
+        self.operationalState.reset_trip()
+        self.powertrainState.reset_trip()
 
     def update(self, snapshot: TelemetrySnapshot) -> VehicleStateModel:
         self.snapshot = snapshot
@@ -62,8 +56,8 @@ class VehicleState:
                 snapshot.metrics["0x11"].allTripMin = snapshot.metrics["0x11"].min
             else:
                 snapshot.metrics["0x11"].allTripMin = 20 # no data 20% min throttle
-        self.current.operational = self.getOpState()
-        self.current.powertrain = self.getPowerTrainState()
+        self.current.operational = self.operationalState.get_state(snapshot)
+        self.current.powertrain = self.powertrainState.get_state(snapshot)
         self.current.confidence = 0.0 # placeholder
         # self.current.reason = (
         #     f"speed={snapshot.metrics['0x0D'].current:.1f}, "

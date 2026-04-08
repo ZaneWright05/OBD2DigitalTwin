@@ -2,9 +2,10 @@ import joblib
 import time
 from pathlib import Path
 
-from model.helpers import MetricPoint
+from model.helpers import MetricPoint, TelemetrySnapshot
+from model.shadowState import ShadowState
 
-class OperationalState:
+class OperationalState(ShadowState):
     def __init__(self):
         self.state = "Unknown"
         self.confidence = 0.0
@@ -25,6 +26,14 @@ class OperationalState:
             self.idleBin = {}
             for temp in range(30, 130, 10):
                 self.idleBin[temp] = {"rpm_ave" : None, "count": 0}
+
+    def reset_trip(self):
+        self.save_bin("idle_bin.joblib")
+        self.state = "Unknown"
+        self.confidence = 0.0
+        self.stateStartTime = time.time()
+        self.unknownCount = 0
+        self.idleCount = 0
 
     def load_bin(self, filepath):
         try:
@@ -191,7 +200,12 @@ class OperationalState:
         
         return maxState, maxScore
     
-    def get_state(self, rpm: MetricPoint, speed: MetricPoint, throttle: MetricPoint, temp: MetricPoint) -> str:
+    def get_state(self, snapshot: TelemetrySnapshot) -> str:
+        rpm = snapshot.metrics['0x0C']
+        speed = snapshot.metrics['0x0D']
+        throttle = snapshot.metrics['0x11']
+        temp = snapshot.metrics['0x05']
+
         rpmROC = rpm.wAvgROC if rpm.wAvgROC is not None else 0.0
         acc = speed.wAvgROC if speed.wAvgROC is not None else 0.0
         histThrottleMin = throttle.allTripMin if throttle.allTripMin is not None else 20.0

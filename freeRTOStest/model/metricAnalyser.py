@@ -75,6 +75,21 @@ class MetricAnalyser:
 
         self.eventsTracked = list(eventsTracked)
 
+    def reset_runtime(self):
+        self.data.clear()
+        self.sliding_window.clear()
+        self.window_sum = 0.0
+
+        self.global_sum = 0.0
+        self.global_count = 0
+
+        self.metrics = Metrics()
+        self.recentSeq = -1
+        self.outOfSequence = False
+
+        self.events.clear()
+        self.active_events.clear()
+
     def update_HistoricMetrics(self):
         if self.historicMetrics is None:
             self.historicMetrics = HistoricMetrics(
@@ -355,6 +370,11 @@ class TempAnalyser(MetricAnalyser):
         
         self.thresholdTemp = thresholdTemp
         self.threshHoldReached = False
+
+    def reset_runtime(self):
+        super().reset_runtime()
+        self.threshHoldReached = False
+        self.eventsTracked = [False, False, False, False]
 
     def add_data_point(self, seq, value):
         if value >= self.thresholdTemp and not self.threshHoldReached:
