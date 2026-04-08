@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from model.metricAnalyser import Metrics
 from model.dataParser import Parser
 from model.helpers import MetricPoint, TelemetrySnapshot
-from model.operationalState import OperationalState
-from model.powertrainState import PowerTrainState
+from model.shadows.operationalState import OperationalState
+from model.shadows.powertrainState import PowerTrainState
 
 @dataclass
 class VehicleStateModel:

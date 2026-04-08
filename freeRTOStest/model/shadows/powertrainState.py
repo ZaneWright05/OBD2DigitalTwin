@@ -2,7 +2,7 @@
 
 from model.helpers import MetricPoint, TelemetrySnapshot
 from time import time
-from model.shadowState import ShadowState
+from model.shadows.shadowState import ShadowState
 
 class PowerTrainState(ShadowState):
     def __init__(self):
@@ -100,7 +100,7 @@ class PowerTrainState(ShadowState):
 
     def get_state(self, snapshot: TelemetrySnapshot) -> str:
         gear = snapshot.current_gear
-        load = snapshot.metrics['0x10']
+        load = snapshot.metrics['0x04']
         throttle = snapshot.metrics['0x11']
         rpm = snapshot.metrics['0x0C']
 

@@ -26,6 +26,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 
+from time import time
 from tachometer import Tachometer
 from topbar import TopBar
 
@@ -177,10 +178,10 @@ class RealTimeScreen(BoxLayout):
         self.content.add_widget(self.aveConsLabel)
         self.content.add_widget(constUnitLabel2)
 
-        driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
-        driverTitle.pos=(driverTitle.width/2.5, 165 - driverTitle.height/2)
+        self.driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
+        self.driverTitle.pos=(self.driverTitle.width/2.5, 165 - self.driverTitle.height/2)
 
-        self.content.add_widget(driverTitle)
+        self.content.add_widget(self.driverTitle)
 
         button1 = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
         button2 = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
@@ -208,6 +209,8 @@ class RealTimeScreen(BoxLayout):
         Clock.schedule_interval(self.refresh, 0.1)
 
     def stop_start_button_handler(self):
+        if self.analyser.tripStartTime and time() - self.analyser.tripStartTime < 1: # prevent accoidental double presses
+            return
         if self.analyser.connected:
             if self.analyser.running:
                 if(self.analyser.stop_trip()):    
@@ -230,7 +233,7 @@ class RealTimeScreen(BoxLayout):
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
         #    print(shadow.powertrain)
-
+            self.driverTitle.text = f"{shadow.powertrain} \n{shadow.operational}"
             state = self.analyser.get_most_recent()
             if state is None:
                 return

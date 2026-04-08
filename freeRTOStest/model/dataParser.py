@@ -348,6 +348,7 @@ class Parser:
             self.serial.flush()
 
             self.state = ConnectionState.ACTIVE_TRIP
+
             return True
         except Exception as e:
             print(f"Exception while sending start command: {e}")

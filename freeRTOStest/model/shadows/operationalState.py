@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from model.helpers import MetricPoint, TelemetrySnapshot
-from model.shadowState import ShadowState
+from model.shadows.shadowState import ShadowState
 
 class OperationalState(ShadowState):
     def __init__(self):

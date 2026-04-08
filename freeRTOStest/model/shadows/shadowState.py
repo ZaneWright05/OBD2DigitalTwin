@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from model.helpers import TelemetrySnapshot
 
 class ShadowState(ABC):
