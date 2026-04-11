@@ -15,7 +15,7 @@ class GearConfig:
     n_gears: int = 6 # number of gears excl rev
     min_speed: float = 5.0 # above this we consider the data
     k_neighbors: int = 3 # need tuning based on user input
-    k_min_total: int = 24 # min to focus on KNN over clustering (tuning req)
+    k_min_total: int = 24
     k_min_per_gear: int = 2
 
 class GearEstimator:
@@ -25,6 +25,7 @@ class GearEstimator:
 
         self.knn = KNeighborsClassifier(n_neighbors=self.config.k_neighbors, weights="distance")
 
+        self.scaler = StandardScaler()
 
         self.knn_ready = False
 
@@ -43,18 +44,20 @@ class GearEstimator:
         self.ratios = obj["ratios"]
         self.gears = obj["gears"]
         self.knn_ready = obj["knn_ready"]
+        self.scaler = obj["scaler"]
 
     def save(self):
         joblib.dump({
             "knn": self.knn,
             "ratios": self.ratios,
             "gears": self.gears,
-            "knn_ready": self.knn_ready
+            "knn_ready": self.knn_ready,
+            "scaler": self.scaler
         }, self.model_path)
 
-    def add_data_point(self, rpm, speed, gear):
+    def add_data_point(self, rpm, speed, gear, throttle):
         ratio = rpm / speed
-        data_point = np.array([rpm, speed, ratio], dtype=np.float64)
+        data_point = np.array([rpm, speed, ratio, throttle], dtype=np.float64)
         print(f"Adding data point: RPM={rpm}, Speed={speed}, Ratio={ratio:.2f}, Gear={gear}")
         self.ratios.append(data_point)
         self.gears.append(int(gear))
@@ -76,20 +79,18 @@ class GearEstimator:
         
         X = np.vstack(self.ratios)
         Y = np.array(self.gears, dtype=int)
-        self.knn.fit(X, Y)
+        X_scaled = self.scaler.fit_transform(X)  # Scale features
+        self.knn.fit(X_scaled, Y)
         self.knn_ready = True
-        # self.save()
-        # self.last_save = 0
 
-    def predict(self, rpm, speed):
+    def predict(self, rpm, speed, throttle):
         if not self.knn_ready:
             return (None, None)
         ratio = rpm / speed
-        data_point = np.array([[rpm, speed, ratio]], dtype=np.float64)
-
-        # data_point.reshape(1, -1)
-        gear = int(self.knn.predict(data_point)[0])
-    
-        distances, _ = self.knn.kneighbors(data_point, n_neighbors=1) # get distance to nearest neighbor
-        confidence = 1.0 / (1.0 + float(distances[0][0])) # simple confidence score based on distance
+        data_point = np.array([[rpm, speed, ratio, throttle]], dtype=np.float64)
+        data_point_scaled = self.scaler.transform(data_point)  # Scale features
+        gear = int(self.knn.predict(data_point_scaled)[0])
+        
+        distances, _ = self.knn.kneighbors(data_point_scaled, n_neighbors=1)
+        confidence = 1.0 / (1.0 + float(distances[0][0]))
         return gear, confidence

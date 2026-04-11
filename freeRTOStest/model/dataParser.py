@@ -5,7 +5,7 @@ import time
 import joblib
 from model.gear_estimate import GearEstimator
 from model.metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
-from model.helpers import pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
+from model.helpers import ThermalPoint, pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
 from IO.input import attempt_serial_connection, read_csv, read_packet
 from enum import Enum, auto
 
@@ -58,19 +58,24 @@ class Parser:
 
         self.speedMetric = MetricAnalyser(
             PIDS["0x0D"], window_size=6, historicMetrics=hist.get("0x0D"),
-            conversionFactor=3.6, rocMin=0.5, lowRocThreshold=-3.5, highRocThreshold=2.5, eventsTracked=[False, False, True, True]
+            conversionFactor=3.6, rocMin=0.5, lowRocThreshold=-3.5, highRocThreshold=2.5, eventsTracked=[False, False, True, True], allowZero=True
         )
 
         self.loadMetric = MetricAnalyser(
-            PIDS["0x04"], window_size=6, historicMetrics=hist.get("0x04"), eventsTracked=[False, False, False, False]
+            PIDS["0x04"], window_size=6, historicMetrics=hist.get("0x04"), eventsTracked=[False, False, False, False],
+            allowZero=True
         )
 
         self.throttleMetric = MetricAnalyser(
-            PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False]
+            PIDS["0x11"], window_size=6, historicMetrics=hist.get("0x11"), eventsTracked=[False, False, False, False], allowZero=True
         )
         # self.loadEstimator = EngineLoadEstimator()
 
-        self.tempMetric = TempAnalyser(PIDS["0x05"], historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False], highThreshold=105, lowThreshold=85, thresholdTemp=87.5)
+        self.tempMetric = TempAnalyser(PIDS["0x05"], window_size=30, # temp changes slowly, larger window to capture trends ~15s
+                                       historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False],
+                                         highThreshold=105, lowThreshold=75, thresholdTemp=80)
+
+        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[False, False, False, False])
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
@@ -87,6 +92,7 @@ class Parser:
             "0x04": self.loadMetric,
             "0x11": self.throttleMetric,
             "0x05": self.tempMetric,
+            "0x0F": self.airIntakeTempMetric,
             "0x10": self.MAFMetric,
             "0x42": self.voltMetric,
             FUELCONSPID: self.fuelConsMetric}
@@ -116,20 +122,32 @@ class Parser:
 
     # TODO: use the confidence and add transition logic, 
     # i.e if currently in gear 3, only transition to gear 2 or 4 and require higher confidence for a jump to gear 1 or 5
-    def estimate_gear(self, speed, rpm):
+    def estimate_gear(self, speed, rpm, throttle):
         if(speed is None or rpm is None):
             return 0
-        if speed < 5 or rpm < self.rpmMetric.metrics.min * 1.25:
-            # low speed or rpm we assume neutral
+        if speed < 3:
+            # low speed we assume neutral
             return 0
     
         self.currentGRatio = rpm / speed
-        gear, conf = self.gearEstimator.predict(rpm, speed)
-        if gear is not None and conf is not None:
-        # and conf >= 0.25:
-            return gear
+        gear, conf = self.gearEstimator.predict(rpm, speed, throttle)
 
-        return 0
+        if gear is None or conf is None:
+            return self.currentGear[0]
+        
+        currentGear = self.currentGear[0] if self.currentGear[0] is not None else 0
+
+        if conf < 0.25:
+            return currentGear
+        
+        if abs(gear - currentGear) > 1 and conf < 0.5: # require higher confidence for large jumps
+            return currentGear
+        
+        if currentGear == 0 and speed >= 5: # avoid neutral stuck
+            return gear
+        
+        return gear
+
 
     def process_packet(self, pid, data0, data1, seq):
         if PIDS.get(pid) is None:
@@ -147,7 +165,7 @@ class Parser:
                 rpmVal = self.rpmMetric.metrics.current
                 
                 if rpmVal != 0.00 and seq == rpmSeq and self.currentGear[1] != seq:
-                    self.currentGear = (self.estimate_gear(value, rpmVal), seq)
+                    self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
                 
                 prevSpeed = self.speedMetric.metrics.current if self.speedMetric.metrics else None
                 self.speedMetric.add_data_point(seq, value)
@@ -162,7 +180,7 @@ class Parser:
                 speedSeq = self.speedMetric.recentSeq
                 speedVal = self.speedMetric.metrics.current
                 if speedVal != 0.00 and seq == speedSeq and self.currentGear[1] != seq:
-                    self.currentGear = (self.estimate_gear(speedVal, value), seq) # store timestamp
+                    self.currentGear = (self.estimate_gear(speedVal, value, self.throttleMetric.metrics.current), seq) # store timestamp
     
             elif pid == "0x10": # derive inst fuel cons
                 self.MAFMetric.add_data_point(seq, value)
@@ -187,8 +205,10 @@ class Parser:
             speed = self.speedMetric.metrics.current
             speedSeq = self.speedMetric.recentSeq
             rpm = self.rpmMetric.metrics.current
-            rpmSeq = self.rpmMetric.recentSeq 
-            if speed is None or rpm is None or speed < 5:
+            rpmSeq = self.rpmMetric.recentSeq
+            throttle = self.throttleMetric.metrics.current
+            throttleSeq = self.throttleMetric.recentSeq
+            if speed is None or rpm is None or speed < 3:
                 return
             matching = False
             if speedSeq != rpmSeq:
@@ -202,15 +222,20 @@ class Parser:
             else:
                 matching = True
 
-
             if not matching:
                 print(f"No matching RPM and speed data for gear label, skipping {rpmSeq}, {speedSeq}...")
                 return
 
+            dataTime = (rpmSeq * self.rpmMetric.pid.period_ms) 
+            throttleTime = throttleSeq * self.throttleMetric.pid.period_ms
+            if abs(throttleTime - dataTime) > 1000: # if throttle data is not within 1 second of rpm/speed data, skip
+                print(f"No matching throttle data for gear label, skipping {throttleSeq}...")
+                return
+
             with open("gear_estim.csv", "a") as f:
-                f.write(f"{rpm},{speed},{self.speedMetric.metrics.maxWAvgROC:.2f},{gear}\n")
+                f.write(f"{rpm},{speed},{throttle},{gear}\n")
                 f.flush()
-            self.gearEstimator.add_data_point(rpm, speed, gear)
+            self.gearEstimator.add_data_point(rpm, speed, gear, throttle)
 
     def calculate_freshness(self):
         score = 1.0
@@ -284,6 +309,32 @@ class Parser:
 
         m = metric.metrics
         hist = metric.historicMetrics
+
+        if isinstance(metric, TempAnalyser):
+            return ThermalPoint(
+                current=m.current if m else None,
+                average=m.average if m else None,
+                wAvgROC=m.wAvgROC if m else None,
+                max=m.max if m else None,
+                min=m.min if m else None,
+                outOfSequence=metric.outOfSequence,
+                eventCount=eventCount,
+                highestPriority=highestPri,
+
+                ## historic metrics
+                allTripAverage=metric.all_trip_average(),
+                allTripMin=hist.min if hist else None,
+                allTripMax=hist.max if hist else None,
+                allTripAverageROC=metric.all_trip_wAvgROC() if hist else None,
+                tripCount=hist.tripCount if hist else 0,
+
+                ## temp specific
+                coolantThreshold=metric.thresholdTemp,
+                overheatThreshold=metric.highThreshold,
+                tempLowThreshold=metric.lowThreshold
+                )
+       
+
         return MetricPoint(
             current=m.current if m else None,
             average=m.average if m else None,
@@ -319,7 +370,9 @@ class Parser:
     
     @property
     def connected(self):
-        return self.serial is not None and self.serial.is_open
+        if self.serial is not None:
+            return self.serial.is_open
+        return self.state != ConnectionState.DISCONNECTED
 
     @property
     def running(self):
@@ -341,35 +394,35 @@ class Parser:
     def start_trip(self):
         if self.state != ConnectionState.CONNECTED or not self.connected:
             return False
-        try:
-            self.reset_trip()
-
-            self.serial.write(b"S\n")
-            self.serial.flush()
-
-            self.state = ConnectionState.ACTIVE_TRIP
-
-            return True
-        except Exception as e:
-            print(f"Exception while sending start command: {e}")
-            self.state = ConnectionState.DISCONNECTED
-            return False
+        
+        self.reset_trip()
+        if self.serial is not None:
+            try:
+                self.serial.write(b"S\n")
+                self.serial.flush()
+            except Exception as e:
+                print(f"Exception while sending start command: {e}")
+                self.state = ConnectionState.DISCONNECTED
+                return False
+        
+        self.state = ConnectionState.ACTIVE_TRIP
+        return True
 
     def stop_trip(self):
         if self.state != ConnectionState.ACTIVE_TRIP:
             return False
         
-        self.state = ConnectionState.DISCONNECTED
-        
-        try:
-            if self.connected:
+        if self.serial is not None and self.connected:
+            try:
                 self.serial.write(b"X\n")
                 self.serial.flush()
+                self.state = ConnectionState.DISCONNECTED
                 # time.sleep(4) # wait for final packets
-        except Exception as e:
-            # print(f"Exception while sending stop command: {e}")
-            pass
-
+            except Exception as e: 
+                self.state = ConnectionState.DISCONNECTED
+                return False
+        else:
+            self.state = ConnectionState.CONNECTED
         self.save_HistoricMetrics()
         return True
 
@@ -392,7 +445,15 @@ class Parser:
 
     def select_mode(self, mode="serial", csv_path="", sample_rate=64):
         if mode != "serial":
-            read_csv(csv_path, self, sample_rate)
+            self.state = ConnectionState.CONNECTED
+            while not self.stop.is_set():
+                if not self.running:
+                    time.sleep(0.05)
+                    continue
+                read_csv(csv_path, self, sample_rate)   # replay once per trip
+                if self.state == ConnectionState.ACTIVE_TRIP:
+                    self.state = ConnectionState.CONNECTED
+            self.state = ConnectionState.DISCONNECTED
             return
 
         while not self.stop.is_set():

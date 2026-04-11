@@ -179,7 +179,7 @@ class RealTimeScreen(BoxLayout):
         self.content.add_widget(constUnitLabel2)
 
         self.driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
-        self.driverTitle.pos=(self.driverTitle.width/2.5, 165 - self.driverTitle.height)
+        self.driverTitle.pos=(self.driverTitle.width, 165 - self.driverTitle.height)
 
         self.content.add_widget(self.driverTitle)
 
@@ -239,7 +239,7 @@ class RealTimeScreen(BoxLayout):
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
         #    print(shadow.powertrain)
-            self.driverTitle.text = f"{shadow.powertrain} \n{shadow.operational}"
+            self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
             state = self.analyser.get_most_recent()
             if state is None:
                 return
@@ -267,8 +267,8 @@ class RealTimeScreen(BoxLayout):
             self.tempMet.label.text = f"{int(temp)} °C" if temp is not None else "-- °C"
 
             fCons = state["fuelCons"]
-            self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current != 0 else "Inst: 0.00"
-            self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None else "Ave: 0.00"
+            self.instConsLabel.text = f"Inst: {fCons.metrics.current:.2f}" if fCons is not None and fCons.metrics.current is not None else "Inst: 0.00"
+            self.aveConsLabel.text = f"Ave: {fCons.all_trip_average():.2f}" if fCons is not None and fCons.all_trip_average() is not None else "Ave: 0.00"
 
             gear = state["gear"]
             self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
@@ -310,14 +310,14 @@ class MyApp(App):
         self.vehicleState = VehicleState()
 
         self.analyser.start_parsing(mode="serial")
-        # self.analyser.start_parsingd(mode="csv", csv_path="", sample_rate=64)
+        # self.analyser.start_parsing(mode="csv", csv_path="", sample_rate=64)
 
     
         return RealTimeScreen(self.analyser, self.vehicleState)
 
-    def on_stop(self):
-        print("App is stopping, saving historic metrics...")
-        self.analyser.save_HistoricMetrics()
+    # def on_stop(self):
+    #     print("App is stopping")
+    #     self.analyser.save_HistoricMetrics()
 
 
 if __name__ == "__main__":

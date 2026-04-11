@@ -59,11 +59,11 @@ def read_packet(ser: serial.Serial):
 
 def read_csv(path, store, sample_rate=16):
     delay = 1.0 / sample_rate
-    store.connected = True
+    # store.connected = True
     with open(path or "data_log_4.csv", "r") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            if not store.connected:
+            if store.stop.is_set() or not store.running:
                 break
             pid = row["PID"]
             data0 = int(row["Data0"], 16)

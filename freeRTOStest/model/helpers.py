@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 @dataclass
 class MetricPoint:
-    current: float
+    current: float | None
     average: float
     wAvgROC: float
     min: float
@@ -17,6 +17,13 @@ class MetricPoint:
     allTripMax: float | None = None
     allTripAverageROC: float | None = None
     tripCount: int = 0
+
+@dataclass
+class ThermalPoint(MetricPoint):
+    coolantThreshold: float | None = None
+    overheatThreshold: float | None = None
+    tempLowThreshold: float | None = None
+
 
 @dataclass
 class TelemetrySnapshot:

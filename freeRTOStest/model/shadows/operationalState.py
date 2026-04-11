@@ -52,6 +52,8 @@ class OperationalState(ShadowState):
             print(f"Error saving bin to {filepath}: {e}")
 
     def to_temp_bin(self, temp: float) -> int:
+        if temp is None:
+            return -1
         if temp < 30:
             return 30
         elif temp > 120:
@@ -71,6 +73,8 @@ class OperationalState(ShadowState):
                 val["count"] += 1
 
     def gen_idle_score(self, rpm: float, temp: float) -> float:
+        if temp == 0.0:
+            return 0.1
         key = self.to_temp_bin(temp)
         val = self.idleBin[key]
         ave = val["rpm_ave"]

@@ -43,7 +43,7 @@ minTrips = 3
 class MetricAnalyser:
     def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1,
                  lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, 
-                 historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [True, True, True, True]):
+                 historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [True, True, True, True], allowZero: bool = False):
         self.pid = pid
         self.data = []
         self.highThreshold = highThreshold # default to None, instances where we look for above and below thresh events
@@ -56,6 +56,7 @@ class MetricAnalyser:
         self.sliding_window = deque(maxlen=window_size)
         self.window_sum = 0.0 # running sum for average calculation
 
+        self.allowZero = allowZero # flag for metrics where 0 isnt no data e.g temp or a %, but RPM is 0 meaning no data
         self.global_sum = 0.0
         self.global_count = 0
 
@@ -156,8 +157,14 @@ class MetricAnalyser:
     def add_data_point(self, seq, value):
         if value is None:
             self.metrics.current = 0.00 # mark to the UI but dont store for calcs, none is is no data not the value 0
+            self.recentSeq = seq
             return
 
+        if value == 0.0 and not self.allowZero: # some metrics use 0 as a default value when no data, we dont want to include these in our calcs
+            self.metrics.current = 0.0
+            self.recentSeq = seq
+            return
+        
         self.data.append((seq, value))
         
         if self.recentSeq != -1 and self.recentSeq != (seq - 1):
@@ -365,6 +372,7 @@ class TempAnalyser(MetricAnalyser):
     def __init__(self, pid: pid, conversionFactor: float = 1.0, highThreshold: float = None, lowThreshold: float = None, rocMin: float = 0.1,
                  lowRocThreshold: float = None, highRocThreshold: float = None, window_size: int = 5, 
                  historicMetrics: HistoricMetrics = None, eventsTracked: list[bool] = [False, False, False, False], thresholdTemp: float = 90.0):
+        
         super().__init__(pid, conversionFactor, highThreshold, lowThreshold, rocMin,
                  lowRocThreshold, highRocThreshold, window_size, historicMetrics, eventsTracked)
         

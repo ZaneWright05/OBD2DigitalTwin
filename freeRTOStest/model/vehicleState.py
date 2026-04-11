@@ -5,6 +5,7 @@ from model.dataParser import Parser
 from model.helpers import MetricPoint, TelemetrySnapshot
 from model.shadows.operationalState import OperationalState
 from model.shadows.powertrainState import PowerTrainState
+from model.shadows.thermalState import ThermalState
 
 @dataclass
 class VehicleStateModel:
@@ -21,6 +22,7 @@ class VehicleState:
         self.snapshot = None
         self.operationalState = OperationalState()
         self.powertrainState = PowerTrainState()
+        self.thermalState = ThermalState()
 
         self.current = VehicleStateModel(
             operational='Unknown',
@@ -58,6 +60,7 @@ class VehicleState:
                 snapshot.metrics["0x11"].allTripMin = 20 # no data 20% min throttle
         self.current.operational = self.operationalState.get_state(snapshot)
         self.current.powertrain = self.powertrainState.get_state(snapshot)
+        self.current.thermal = self.thermalState.get_state(snapshot)
         self.current.confidence = 0.0 # placeholder
         # self.current.reason = (
         #     f"speed={snapshot.metrics['0x0D'].current:.1f}, "

@@ -5,7 +5,7 @@ note.txt
 *.csv
 !data_log2.csv
 *.db
-__pycache__/*
+*/__pycache__/*
 !data_log_4.csv
 !gear_estim.csv
 historicMetrics.joblib
