@@ -1,3 +1,4 @@
+from time import time
 import os
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle, Line, RoundedRectangle
@@ -6,10 +7,13 @@ from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 
+# from model.dataParser import Parser
+# from model.vehicleState import VehicleState
+
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 
 class TopBar(BoxLayout):
-    def __init__(self, **kwargs):
+    def __init__(self, analyser, vehicleState, **kwargs):
         super().__init__(**kwargs)
 
         self.orientation = 'horizontal'
@@ -18,6 +22,9 @@ class TopBar(BoxLayout):
         self.pos_hint = {'top': 1}
         self.padding = (10, 0, 0, 0)
         self.spacing = 8
+        self.analyser = analyser
+        self.vehicleState = vehicleState
+
 
         with self.canvas.before:
             Color(1, 1, 1, 1)
@@ -42,6 +49,7 @@ class TopBar(BoxLayout):
             size_hint=(None, None),
             size=(50, 50)
         )
+        self.currentSignalLevel = "low"
         self.signalImg = Image(
             source=os.path.join(imgDir, "lowConnection.png"),
             size_hint=(None, None),
@@ -69,6 +77,8 @@ class TopBar(BoxLayout):
             size_hint=(None, 1),
             width=90,
         )
+        self._last_trip_btn_press_s = 0.0
+        self.tripButton.bind(on_press=lambda _: self.stop_start_button_handler())
 
         self.roadImg = Image(
             source=os.path.join(imgDir, "road.png"),
@@ -147,14 +157,13 @@ class TopBar(BoxLayout):
         self.add_widget(self.rightContent)
 
     def set_signal(self, level):
-        if level == "low":
+        if level == "low" and self.currentSignalLevel != "low":
             self.signalImg.source = os.path.join(imgDir, "lowConnection.png")
-        elif level == "medium":
+        elif level == "medium" and self.currentSignalLevel != "medium":
             self.signalImg.source = os.path.join(imgDir, "medConnection.png")
-        elif level == "high":
+        elif level == "high" and self.currentSignalLevel != "high":
             self.signalImg.source = os.path.join(imgDir, "highConnection.png")
-        else:
-            print("No conn img")
+        self.currentSignalLevel = level
 
     def set_connection(self, status: bool):
         self.connectionState = status
@@ -178,3 +187,55 @@ class TopBar(BoxLayout):
     def update_event_bg(self, *args):
         self.eventBg.pos = self.eventLabel.pos
         self.eventBg.size = self.eventLabel.size
+
+    def stop_start_button_handler(self):
+        now = time()
+        if (now - self._last_trip_btn_press_s) < 0.35:
+            return
+        self._last_trip_btn_press_s = now
+        
+        if self.analyser.connected:
+            if self.analyser.running:
+                if(self.analyser.stop_trip()):    
+                    self.tripButton.text = "Start Trip"
+                    self.set_event_text("Trip stopped, saving data...") # TODO: list as event so it dissapears
+            else:
+                if(self.analyser.start_trip()):
+                    self.vehicleState.reset_state()
+                    self.tripButton.text = "Stop Trip"
+                    self.set_event_text("Trip started, collecting data...")
+    
+    def update_stop_start_btn(self):
+        if self.analyser.running and self.tripButton.text != "Stop Trip":
+            self.tripButton.text = "Stop Trip"
+        elif not self.analyser.running and self.tripButton.text != "Start Trip":
+            self.tripButton.text = "Start Trip"
+
+    def set_event_text(self, msg):
+        self.eventLabel.text = msg
+
+    def update_topBar(self, state):
+        self.update_stop_start_btn()
+
+        self.set_connection(self.analyser.connected)
+        if self.analyser.connected and self.analyser.running:
+            freshness = state["freshness"]
+            if freshness is not None:
+                if freshness > 0.95:
+                    self.set_signal("high")
+                elif freshness > 0.33:
+                    self.set_signal("medium")
+                else:
+                    self.set_signal("low")
+
+            # TODO: 2 minute last shown timer
+            event_msg = state.get("event_message", "")
+            if event_msg:
+                self.set_event_text(event_msg)
+
+            self.timeLabel.text = state.get("time", "00:00:00")
+            self.distLabel.text = f"{state.get('distance', '00.00')} km"
+        else:
+            self.set_signal("low")
+            self.timeLabel.text = "00:00:00"
+            self.distLabel.text = "00.00 km"

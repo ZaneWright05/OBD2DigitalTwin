@@ -12,8 +12,6 @@ class VehicleStateModel:
     operational: str
     powertrain: str
     thermal: str
-    efficiency: str
-    health: str
     confidence: float
     reason: str
 
@@ -28,8 +26,6 @@ class VehicleState:
             operational='Unknown',
             powertrain='Unknown',
             thermal='Unknown',
-            efficiency='Unknown',
-            health='Unknown',
             confidence=0.0,
             reason=''
         )
@@ -43,14 +39,13 @@ class VehicleState:
             operational='Unknown',
             powertrain='Unknown',
             thermal='Unknown',
-            efficiency='Unknown',
-            health='Unknown',
             confidence=0.0,
             reason=''
         )
         self.operationalState.reset_trip()
         self.powertrainState.reset_trip()
-
+        self.thermalState.reset_trip()
+        
     def update(self, snapshot: TelemetrySnapshot) -> VehicleStateModel:
         self.snapshot = snapshot
         if snapshot.metrics["0x11"].allTripMin is None:

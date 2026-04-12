@@ -108,7 +108,7 @@ class Parser:
         self.currentGRatio = None
 
     def save_HistoricMetrics(self):
-        if self.tripStartTime is None:
+        if self.tripStartTime is None or self.serial is None:
             return
         if (time.monotonic() - self.tripStartTime < 300):
             print("Trip too short (< 5 minutes), not saving historic metrics...")

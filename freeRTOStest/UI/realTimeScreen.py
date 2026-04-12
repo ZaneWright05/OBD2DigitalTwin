@@ -25,10 +25,13 @@ from kivy.uix.label import Label
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.screenmanager import NoTransition
 
 from time import time
 from tachometer import Tachometer
 from topbar import TopBar
+from vehicleStateScreen import VehicleStateScreen
 
 import sys
 from pathlib import Path
@@ -88,11 +91,13 @@ class MetricWidget(BoxLayout):
         self.add_widget(self.image)
         self.add_widget(self.label)
 
-class RealTimeScreen(BoxLayout):
-    def __init__(self, analyser, vehicleState, **kwargs):
+class RealTimeScreen(Screen):
+    def __init__(self, screenManager, analyser, vehicleState, **kwargs):
         super().__init__(**kwargs)
+        self.screenManager = screenManager
 
-        self.orientation = 'vertical'
+        self.boxLayout = BoxLayout()
+        self.boxLayout.orientation = 'vertical'
         self.analyser = analyser
         self.vehicleState = vehicleState
 
@@ -101,10 +106,9 @@ class RealTimeScreen(BoxLayout):
             self.bg_rect = Rectangle(pos=self.pos, size=Window.size)
 
         self.bind(size=self.update_bg_rect, pos=self.update_bg_rect)
-
-        self.topbar = TopBar()
-        self.add_widget(self.topbar)
-        self.topbar.tripButton.bind(on_press=lambda _: self.stop_start_button_handler())
+        
+        self.topbar = TopBar(analyser=self.analyser, vehicleState=self.vehicleState)
+        self.boxLayout.add_widget(self.topbar)
         self.content = Widget()
 
         gearBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(185, 390), pos=(610,0))
@@ -183,15 +187,18 @@ class RealTimeScreen(BoxLayout):
 
         self.content.add_widget(self.driverTitle)
 
-        button1 = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
-        button2 = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
-        button3 = Button(text="History", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
-        button4 = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
+        activeDriveBtn = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
+        activeDriveBtn.set_disabled(True)
 
+        vehicleStateBtn = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
+        vehicleStateBtn.bind(on_press=lambda instance: self.swap_screen('vehicleState'))
+        
 
-        self._last_trip_btn_press_s = 0.0
+        self.disabledBtns = False
+        self.replayBtn = Button(text="Replay", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
+        self.settingsBtn = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
 
-        for btn in [button1, button2, button3, button4]:
+        for btn in [activeDriveBtn, vehicleStateBtn, self.replayBtn, self.settingsBtn]:
             btn.background_normal = ''
             btn.background_color = (1, 1, 1, 1)
             btn.color = (0, 0, 0, 1)
@@ -208,46 +215,64 @@ class RealTimeScreen(BoxLayout):
             Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
 
 
-        self.add_widget(self.content)
+        self.boxLayout.add_widget(self.content)
+        self.add_widget(self.boxLayout)
         Clock.schedule_interval(self.refresh, 0.1)
-
-    def stop_start_button_handler(self):
-        now = time()
-        if (now - self._last_trip_btn_press_s) < 0.35:
-            return
-        self._last_trip_btn_press_s = now
-        
-        if self.analyser.connected:
-            if self.analyser.running:
-                if(self.analyser.stop_trip()):    
-                    self.topbar.tripButton.text = "Start Trip"
-                    self.set_event_text("Trip stopped, saving data...")
-            else:
-                if(self.analyser.start_trip()):
-                    self.vehicleState.reset_state()
-                    self.topbar.tripButton.text = "Stop Trip"
-                    self.set_event_text("Trip started, collecting data...")
 
     def set_event_text(self, msg):
         self.topbar.eventLabel.text = msg
 
+    def swap_screen(self, screen_name):
+        screen = self.screenManager.get_screen(screen_name)
+        if screen:
+            state = self.analyser.get_most_recent()
+            if state is None:
+                return
+            else:
+                self.topbar.update_topBar(state)
+            self.screenManager.current = screen_name
+
+
     def refresh(self, dt):
-        if self.analyser.connected != self.topbar.connectionState:
-            self.topbar.set_connection(self.analyser.connected)
+        if self.screenManager.current != 'realTime':
+            return
+    
+        state = self.analyser.get_most_recent()
+        if state is None:
+            return
+
+        self.topbar.update_topBar(state)
 
         if self.analyser.connected and self.analyser.running:
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
         #    print(shadow.powertrain)
             self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
+
             state = self.analyser.get_most_recent()
             if state is None:
                 return
-            self.topbar.timeLabel.text = state["time"]
-            self.topbar.distLabel.text = f"{state['distance']} km"
+            # self.topbar.timeLabel.text = state["time"]
+            # self.topbar.distLabel.text = f"{state['distance']} km"
+
+            # if self.topbar.tripButton.text != "Stop Trip":
+            #     self.topbar.tripButton.text = "Stop Trip"
+                
 
             speed = state["speed"].metrics if state["speed"].metrics else None
-            self.speedLabel.text = f"{int(speed.current) if speed is not None and int(speed.current) != 0 else '0'} km/h"
+            if speed is not None and speed.current is not None:
+                self.speedLabel.text = f"{int(speed.current)} km/h"
+                if speed.current > 5 and not self.disabledBtns:
+                    self.replayBtn.set_disabled(True)
+                    self.settingsBtn.set_disabled(True)
+                elif speed.current <= 5 and not self.disabledBtns:
+                    self.replayBtn.set_disabled(False)
+                    self.settingsBtn.set_disabled(False)
+            else:
+                self.speedLabel.text = "0 km/h"
+                self.replayBtn.set_disabled(False)
+                self.settingsBtn.set_disabled(False)
+
             accStr = " 0.00 m/s²"
             if speed and speed.wAvgROC is not None:
                 if(speed.wAvgROC) >= 0:
@@ -273,31 +298,31 @@ class RealTimeScreen(BoxLayout):
             gear = state["gear"]
             self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
 
-            freshness = state["freshness"]
-            if freshness is not None:
-                if freshness > 0.95:
-                    self.topbar.set_signal("high")
-                elif freshness > 0.33:
-                    self.topbar.set_signal("medium")
-                else:
-                    self.topbar.set_signal("low")
+            # freshness = state["freshness"]
+            # if freshness is not None:
+            #     if freshness > 0.95:
+            #         self.topbar.set_signal("high")
+            #     elif freshness > 0.33:
+            #         self.topbar.set_signal("medium")
+            #     else:
+            #         self.topbar.set_signal("low")
 
-            event = state["event"]
-            if event is None:
-                if not self.topbar.eventLabelHidden:
-                    self.topbar.eventLabelHidden = True
-                    self.topbar.eventLabel.opacity = 0
-                    self.topbar.eventLabel.disabled = True
-                    self.set_event_text("")
-            else:
-                self.topbar.eventLabelHidden = False
-                self.topbar.eventLabel.opacity = 1
-                self.topbar.eventLabel.disabled = False
-                # print(f"Event detected in UI: {event}")
-                endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
-                startTime_ms = event.timestamp * event.pid.period_ms
-                startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-                self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+            # event = state["event"]
+            # if event is None:
+            #     if not self.topbar.eventLabelHidden:
+            #         self.topbar.eventLabelHidden = True
+            #         self.topbar.eventLabel.opacity = 0
+            #         self.topbar.eventLabel.disabled = True
+            #         self.set_event_text("")
+            # else:
+            #     self.topbar.eventLabelHidden = False
+            #     self.topbar.eventLabel.opacity = 1
+            #     self.topbar.eventLabel.disabled = False
+            #     # print(f"Event detected in UI: {event}")
+            #     endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+            #     startTime_ms = event.timestamp * event.pid.period_ms
+            #     startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
+            #     self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
         
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
@@ -308,12 +333,24 @@ class MyApp(App):
     def build(self):
         self.analyser = Parser()
         self.vehicleState = VehicleState()
+        self.topbar = TopBar(analyser=self.analyser, vehicleState=self.vehicleState)
 
-        self.analyser.start_parsing(mode="serial")
-        # self.analyser.start_parsing(mode="csv", csv_path="", sample_rate=64)
+        # self.analyser.start_parsing(mode="serial")
+        self.analyser.start_parsing(mode="csv", csv_path="", sample_rate=64)
 
-    
-        return RealTimeScreen(self.analyser, self.vehicleState)
+        self.screenManager = ScreenManager()
+        self.screenManager.transition = NoTransition()
+
+        self.realTimeScreen = RealTimeScreen(self.screenManager, self.analyser, self.vehicleState, name='realTime')
+        self.screenManager.add_widget(self.realTimeScreen)
+
+        self.vehicleStateScreen = VehicleStateScreen(self.screenManager, self.analyser, self.vehicleState, name='vehicleState')
+        self.screenManager.add_widget(self.vehicleStateScreen)
+
+
+        print("Available screens in ScreenManager:")
+        print([screen.name for screen in self.screenManager.screens])
+        return self.screenManager
 
     # def on_stop(self):
     #     print("App is stopping")

@@ -54,7 +54,7 @@ class ThermalState(ShadowState):
             throttle is not None and throttle < 40 # low driver demand
         )
 
-    def estimate_state(self, coolantTemp: float, coolantHistoricCenter: float, coolantMax: float,coolantThreshold: float, 
+    def estimate_state(self, coolantTemp: float, coolantThreshold: float, 
                        overheatThreshold: float, tempLowThreshold: float, intakeTemp: float, 
                        tempROC: float, tempROCThresh: float, speed: float, load: float, throttle: float) -> str:
 
@@ -78,7 +78,7 @@ class ThermalState(ShadowState):
         if coolantTemp >= overheatThreshold:
             return "Overheating"
 
-        if coolantTemp >= (coolantMax - 3) and coolantTemp > (coolantHistoricCenter + 8):
+        if coolantTemp >= (overheatThreshold - 5):
             return "Overheat Risk"
 
         if coolantTemp >= (overheatThreshold - 5):
@@ -88,10 +88,8 @@ class ThermalState(ShadowState):
             if self.is_cooling(tempROC, tempROCThresh, speed, load, throttle):
                 return "Cooling"
 
-        if abs(coolantTemp - coolantHistoricCenter) < 5:
-            return "Normal Running"
+        return "Normal Running"
 
-        return "Unknown"
 
     def get_state(self, snapshot: TelemetrySnapshot) -> str:
         thermalMetr = snapshot.metrics.get("0x05")
@@ -102,7 +100,6 @@ class ThermalState(ShadowState):
         overheatThreshold = None
         tempLowThreshold = None
 
-        coolantCenter = thermalMetr.allTripAverage if thermalMetr.allTripAverage is not None else 90.0
         coolantMax = thermalMetr.allTripMax if thermalMetr.allTripMax is not None else 100.0
         coolantROCThresh = thermalMetr.allTripAverageROC * 1.5 if thermalMetr.allTripAverageROC is not None else 0.05
 
@@ -129,7 +126,6 @@ class ThermalState(ShadowState):
 
         newState = self.estimate_state(
             coolantTemp=thermalMetr.current,
-            coolantHistoricCenter=coolantCenter,
             coolantThreshold=coolantThreshold,
             overheatThreshold=overheatThreshold,
             tempLowThreshold=tempLowThreshold,
@@ -138,8 +134,7 @@ class ThermalState(ShadowState):
             speed=speed,
             load=load,
             throttle=throttle,
-            tempROCThresh=coolantROCThresh,
-            coolantMax=coolantMax
+            tempROCThresh=coolantROCThresh
         )
 
         if newState is None:
