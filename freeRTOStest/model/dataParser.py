@@ -244,6 +244,15 @@ class Parser:
                 score -= 1/len(self.metrics) # each out of sequence metric reduces freshness by equal amount
         return max(score, 0.0)
 
+    def get_sorted_events(self):
+        events = []
+        for metric in self.metrics.values():
+            if metric.active_events:
+                events.extend(metric.active_events.values())
+            
+        sorted_events = sorted(events, key=lambda event: (event.timestamp, event.priority))
+        return sorted_events
+
     def get_most_recent(self):
         if not self.connected:
             return None
@@ -257,18 +266,12 @@ class Parser:
             seconds = int(elapsedTime_s % 60)
             time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+            sortedEvents = self.get_sorted_events()
+            if sortedEvents:
+                recentEvent = sortedEvents[-1]
+            else:
+                recentEvent = None
 
-            recentEvent = None
-            highestPri = -1
-            for metric in self.metrics.values():
-                if metric.active_events:
-                    for event in metric.active_events.values():
-                        if event.priority > highestPri:
-                            highestPri = event.priority
-                            recentEvent = event
-                        elif event.priority == highestPri:
-                            if recentEvent is None or event.timestamp > recentEvent.timestamp:
-                                recentEvent = event
             if recentEvent is not None:
                 self.lastEvent = recentEvent
                 self.lastEventEndTime = 0.0
@@ -292,6 +295,7 @@ class Parser:
                 "temp": self.tempMetric,
                 "volt": self.voltMetric,
                 "event": recentEvent,
+                "allEvents": sortedEvents,
                 "fuelCons": self.fuelConsMetric,  
                 "gear": self.currentGear[0],
                 "ratio": self.currentGRatio,

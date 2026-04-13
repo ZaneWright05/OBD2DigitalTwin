@@ -165,7 +165,6 @@ class OperationalState(ShadowState):
         scores = {
             "Idling": 0.0,
             "Cruising": 0.0,
-            "Coasting": 0.0, # idle rpm, low throttle, low decel
             "Accelerating": 0.0,
             "Decelerating": 0.0
         }

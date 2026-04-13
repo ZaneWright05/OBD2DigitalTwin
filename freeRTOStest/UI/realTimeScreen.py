@@ -111,12 +111,14 @@ class RealTimeScreen(Screen):
         self.boxLayout.add_widget(self.topbar)
         self.content = Widget()
 
-        gearBox = BoxLayout(orientation='vertical', size_hint=(None, None), size=(185, 390), pos=(610,0))
-        self.estGearLabel = Label(text="Gear: -", size_hint=(1, 0.1),
-                                   color=(0, 0, 0, 1), 
-                                   font_size=18)
+        gearBox = Widget(size=(185, 390), pos=(610,42))
+        self.estGearLabel = Label(text="N",
+                                size=(185, 40), 
+                                pos=(gearBox.pos[0], gearBox.pos[1] + 300),
+                                color=(0, 0, 0, 1),
+                                font_size=64)
         
-        gears = GridLayout(cols=2, size_hint=(1, 0.6), spacing=8, padding=8)
+        gears = GridLayout(cols=2, size=(185, 300),pos=(gearBox.pos[0] + 15, gearBox.pos[1] - 30), spacing=8, padding=8)
         for i in range(1, 7):
             btn = Button(text=f"{i}",
             size_hint=(None, None),  

@@ -125,7 +125,7 @@ class TopBar(BoxLayout):
         self.eventLabelHidden = False
 
         self.eventLabel = Label(
-            text="[45:20] Temperature coolant spike detected",
+            text="",
             size_hint=(None, None),   
             pos_hint={"center_y": 0.5},
             color=(1, 1, 1, 1),
@@ -228,10 +228,23 @@ class TopBar(BoxLayout):
                 else:
                     self.set_signal("low")
 
-            # TODO: 2 minute last shown timer
-            event_msg = state.get("event_message", "")
-            if event_msg:
-                self.set_event_text(event_msg)
+            
+            event = state["event"]
+            if event is None:
+                if not self.eventLabelHidden:
+                    self.eventLabelHidden = True
+                    self.eventLabel.opacity = 0
+                    self.eventLabel.disabled = True
+                    self.set_event_text("")
+            else:
+                self.eventLabelHidden = False
+                self.eventLabel.opacity = 1
+                self.eventLabel.disabled = False
+                # print(f"Event detected in UI: {event}")
+                endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+                startTime_ms = event.timestamp * event.pid.period_ms
+                startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
+                self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
 
             self.timeLabel.text = state.get("time", "00:00:00")
             self.distLabel.text = f"{state.get('distance', '00.00')} km"

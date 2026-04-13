@@ -59,55 +59,120 @@ class VehicleStateScreen(Screen):
         self.topbar = TopBar(analyser=self.analyser, vehicleState=self.vehicleState)
         self.boxLayout.add_widget(self.topbar)
         # ?self.topbar.tripButton.bind(on_press=lambda _: self.stop_start_button_handler())
-        self.content = Widget()
-
-        activeDriveBtn = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
-        activeDriveBtn.bind(on_press=lambda instance: self.swap_screen('realTime'))
-                     #self.screenManager.switch_to(self.screenManager.get_screen('realTime')))
-        vehicleStateBtn = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
-        vehicleStateBtn.set_disabled(True)
-
 
         self.disabledBtns = False
-        self.replayBtn = Button(text="Replay", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
-        self.settingsBtn = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
+        activeDriveBtn = Button(text="Active Drive")
+        activeDriveBtn.bind(on_press=lambda instance: self.swap_screen('realTime'))
 
+        vehicleStateBtn = Button(text="Vehicle State")
+        vehicleStateBtn.set_disabled(True)
+
+        self.replayBtn = Button(text="Replay")
+        self.settingsBtn = Button(text="Settings")
 
         self._last_trip_btn_press_s = 0.0
+
+        self.content = BoxLayout(
+            orientation='horizontal',
+            size_hint=(1, 1)
+        )
+
+        bottomBar = BoxLayout(
+            orientation='horizontal',
+            size_hint=(1, None),
+            height=Window.height * 0.1
+        )
 
         for btn in [activeDriveBtn, vehicleStateBtn, self.replayBtn, self.settingsBtn]:
             btn.background_normal = ''
             btn.background_color = (1, 1, 1, 1)
             btn.color = (0, 0, 0, 1)
-            self.content.add_widget(btn)
-
-        with self.content.canvas:
-            Color(0, 0, 0, 1)
-            Line(points=[3 * Window.width / 4, Window.height - self.topbar.height, 3 * Window.width / 4, 0], width=1)
-
-
+            btn.size_hint = (1, 1)
+            bottomBar.add_widget(btn)
         # shadows
-        shadowBox = BoxLayout(orientation='vertical', size_hint=(None, None), height=Window.height - self.topbar.height - activeDriveBtn.height, width=3 * Window.width / 4)
+        imgBox = BoxLayout(
+            orientation='vertical',
+            size_hint=(0.25, 1)
+        )
+
+        labelBox = BoxLayout(
+            orientation='vertical',
+            size_hint=(0.75, 1)
+        )
+
+        operationalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
+        self.currentOperationalState = "Unknown"
+        self.opImg = Image(source=os.path.join("assets","operationalState", "unknownState.png"), size_hint=(None, None), height=128.1, width = 134.4, x=0, y=0)
+        imgBox.add_widget(self.opImg)
+
+        opTitle = Label(text="Operational State",size_hint=(0.33, 1),color=(0,0,0,1),
+                        halign='left', valign='middle')
+        opTitle.bind(size=opTitle.setter('text_size'))
+
+        self.opLabel = Label(text=self.currentOperationalState,size_hint=(0.67, 1),
+                             color=(0,0,0,1),halign='left',valign='middle')
+        self.opLabel.bind(size=self.opLabel.setter('text_size'))
+    
+        operationalBox.add_widget(opTitle)
+        operationalBox.add_widget(self.opLabel)
+        labelBox.add_widget(operationalBox)
 
 
-        ## sizing and positioning required
-        operationalBox = BoxLayout(orientation='horizontal', size_hint=(None, None))
-        self.opImg = Image(source=os.path.join("assets","operationalState", "unknownState.png"), size_hint=(None, None))
-        shadowBox.add_widget(self.opImg)
+        self.currentPowertrainState = "Unknown"
+        powertrainBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
 
-        powertrainBox = BoxLayout(orientation='horizontal', size_hint=(None, None))
-        self.ptImg = Image(source=os.path.join("assets","powertrainState", "unknownPTState.png"), size_hint=(None, None))
-        shadowBox.add_widget(self.ptImg)
+        self.ptImg = Image(source=os.path.join("assets","powertrainState", "unknownState.png"), size_hint=(None, None), height=128.1, width = 134.4)
+        imgBox.add_widget(self.ptImg)
+
+        ptTitle = Label(text="Powertrain State",size_hint=(0.33, 1),color=(0,0,0,1),
+                        halign='left',valign='middle')
+        ptTitle.bind(size=ptTitle.setter('text_size'))
+
+        self.ptLabel = Label(text=self.currentPowertrainState,size_hint=(0.67, 1),
+                             color=(0,0,0,1),halign='left',valign='middle')
+        self.ptLabel.bind(size=self.ptLabel.setter('text_size'))
+
+        powertrainBox.add_widget(ptTitle)
+        powertrainBox.add_widget(self.ptLabel)
+        labelBox.add_widget(powertrainBox)
 
         self.currentThermalState = "Unknown"
-        thermalBox = BoxLayout(orientation='horizontal', size_hint=(None, None))
-        self.thImg = Image(source=os.path.join("assets","thermalState", "thermUnknown.png"), size_hint=(None, None))
-        shadowBox.add_widget(self.thImg)
+        thermalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
+        
+        self.thImg = Image(source=os.path.join("assets","thermalState", "thermUnknown.png"), size_hint=(None, None), height=128.1, width = 134.4)
+        imgBox.add_widget(self.thImg)
+        
+        thTitle = Label(text="Thermal State",size_hint=(0.33, 1),color=(0,0,0,1),
+                        halign='left',valign='middle')
+        thTitle.bind(size=thTitle.setter('text_size'))
 
-        self.content.add_widget(shadowBox)
+        self.thLabel = Label(text=self.currentThermalState,size_hint=(0.67, 1),
+                             color=(0,0,0,1),halign='left',valign='middle')
+        self.thLabel.bind(size=self.thLabel.setter('text_size'))
+        # thermalBox.add_widget(self.thImg)
+        thermalBox.add_widget(thTitle)
+        thermalBox.add_widget(self.thLabel)
+        labelBox.add_widget(thermalBox)
+
+        self.content.add_widget(imgBox)
+        self.content.add_widget(labelBox)
+
 
         self.boxLayout.add_widget(self.content)
+        self.boxLayout.add_widget(bottomBar)
         self.add_widget(self.boxLayout)
+
+        with self.boxLayout.canvas.after:
+            Color(0, 0, 0, 1)
+            Line(points=[3 * Window.width / 4, Window.height - self.topbar.height, 3 * Window.width / 4, 0], width=1)
+            # button borders
+            Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
+            Line(points=[Window.width, 0, 0, 0], width=1)
+            Line(points=[0, Window.height/10, 0, 0], width=1)
+            Line(points=[Window.width, Window.height/10, Window.width, 0], width=1)
+            Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
+            Line(points=[Window.width/2, Window.height/10, Window.width/2, 0], width=1)
+
         Clock.schedule_interval(self.refresh, 0.1)
 
     def update_bg_rect(self, *args):
@@ -146,6 +211,41 @@ class VehicleStateScreen(Screen):
         elif thermal == "Cooling":
             self.thImg.source = os.path.join("assets","thermalState", "thermCooling.png")
         self.currentThermalState = thermal
+        self.thLabel.text = thermal
+
+    def powertrain_to_img(self, powertrain):
+        if powertrain == self.currentPowertrainState:
+            return
+        if powertrain == "Unknown":
+            self.ptImg.source = os.path.join("assets","powertrainState", "unknownState.png")
+        elif powertrain == "Engine Braking":
+            self.ptImg.source = os.path.join("assets","powertrainState", "engineBrakingState.png")
+        elif powertrain == "Neutral":
+            self.ptImg.source = os.path.join("assets","powertrainState", "neutralState.png")
+        elif powertrain == "Under Load":
+            self.ptImg.source = os.path.join("assets","powertrainState", "underLoadState.png")
+        elif powertrain == "High Load":
+            self.ptImg.source = os.path.join("assets","powertrainState", "highLoadState.png")
+        self.currentPowertrainState = powertrain
+        self.ptLabel.text = powertrain
+
+    def operational_to_img(self, operational):
+        if operational == self.currentOperationalState:
+            return
+        if operational == "Unknown":
+            self.opImg.source = os.path.join("assets","operationalState", "unknownState.png")
+        elif operational == "Idling":
+            self.opImg.source = os.path.join("assets","operationalState", "idleState.png")
+        elif operational == "Accelerating":
+            self.opImg.source = os.path.join("assets","operationalState", "accelState.png")
+        elif operational == "Decelerating":
+            self.opImg.source = os.path.join("assets","operationalState", "decelState.png")
+        elif operational == "Cruising":
+            self.opImg.source = os.path.join("assets","operationalState", "cruiseState.png")
+        elif operational == "Stopped":
+            self.opImg.source = os.path.join("assets","operationalState", "offState.png")
+        self.currentOperationalState = operational
+        self.opLabel.text = operational
 
     def refresh(self, dt):
         if self.screenManager.current != 'vehicleState':
@@ -167,6 +267,9 @@ class VehicleStateScreen(Screen):
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
             self.thermal_to_img(shadow.thermal)
+            self.powertrain_to_img(shadow.powertrain)
+            self.operational_to_img(shadow.operational)
+            
         #    print(shadow.powertrain)
             # self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
             
