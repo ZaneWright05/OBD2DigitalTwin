@@ -72,6 +72,7 @@ class TopBar(BoxLayout):
         )
         self.rightContent.bind(minimum_width=self.rightContent.setter('width'))
 
+        self.tripBtnDisabled = False
         self.tripButton = Button(
             text="Start Trip",
             size_hint=(None, 1),
@@ -216,7 +217,6 @@ class TopBar(BoxLayout):
 
     def update_topBar(self, state):
         self.update_stop_start_btn()
-
         self.set_connection(self.analyser.connected)
         if self.analyser.connected and self.analyser.running:
             freshness = state["freshness"]
@@ -228,7 +228,14 @@ class TopBar(BoxLayout):
                 else:
                     self.set_signal("low")
 
-            
+            speed = state["speed"]
+            if speed is not None and speed.metrics.current > 0:
+                self.tripButton.set_disabled(True)
+                self.tripBtnDisabled = True
+            elif self.tripBtnDisabled:
+                self.tripButton.set_disabled(False)
+                self.tripBtnDisabled = False
+
             event = state["event"]
             if event is None:
                 if not self.eventLabelHidden:
@@ -249,6 +256,9 @@ class TopBar(BoxLayout):
             self.timeLabel.text = state.get("time", "00:00:00")
             self.distLabel.text = f"{state.get('distance', '00.00')} km"
         else:
+            if self.tripBtnDisabled:
+                self.tripButton.set_disabled(False)
+                self.tripBtnDisabled = False
             self.set_signal("low")
             self.timeLabel.text = "00:00:00"
             self.distLabel.text = "00.00 km"

@@ -69,6 +69,7 @@ def read_csv(path, store, sample_rate=16):
             data0 = int(row["Data0"], 16)
             data1 = int(row["Data1"], 16)
             seq = int(row["Seq"])
+            # print(f"CSV Replay - PID: {pid}, Data: {data0:02X} {data1:02X}, Seq: {seq}")
             store.process_packet(pid, data0, data1, seq)
             sleep(delay)
 

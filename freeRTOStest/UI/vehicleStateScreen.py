@@ -67,8 +67,8 @@ class VehicleStateScreen(Screen):
         vehicleStateBtn = Button(text="Vehicle State")
         vehicleStateBtn.set_disabled(True)
 
-        self.replayBtn = Button(text="Replay")
-        self.settingsBtn = Button(text="Settings")
+        # self.replayBtn = Button(text="Replay")
+        # self.settingsBtn = Button(text="Settings")
 
         self._last_trip_btn_press_s = 0.0
 
@@ -83,7 +83,7 @@ class VehicleStateScreen(Screen):
             height=Window.height * 0.1
         )
 
-        for btn in [activeDriveBtn, vehicleStateBtn, self.replayBtn, self.settingsBtn]:
+        for btn in [activeDriveBtn, vehicleStateBtn]:
             btn.background_normal = ''
             btn.background_color = (1, 1, 1, 1)
             btn.color = (0, 0, 0, 1)
@@ -164,13 +164,13 @@ class VehicleStateScreen(Screen):
 
         with self.boxLayout.canvas.after:
             Color(0, 0, 0, 1)
-            Line(points=[3 * Window.width / 4, Window.height - self.topbar.height, 3 * Window.width / 4, 0], width=1)
+            Line(points=[3 * Window.width / 4, Window.height - self.topbar.height, 3 * Window.width / 4, Window.height/10], width=1)
             # button borders
             Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
             Line(points=[Window.width, 0, 0, 0], width=1)
             Line(points=[0, Window.height/10, 0, 0], width=1)
             Line(points=[Window.width, Window.height/10, Window.width, 0], width=1)
-            Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
+            # Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
             Line(points=[Window.width/2, Window.height/10, Window.width/2, 0], width=1)
 
         Clock.schedule_interval(self.refresh, 0.1)
@@ -269,7 +269,7 @@ class VehicleStateScreen(Screen):
             self.thermal_to_img(shadow.thermal)
             self.powertrain_to_img(shadow.powertrain)
             self.operational_to_img(shadow.operational)
-            
+
         #    print(shadow.powertrain)
             # self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
             
@@ -285,18 +285,18 @@ class VehicleStateScreen(Screen):
             # self.topbar.distLabel.text = f"{state['distance']} km"
 
 
-            speed = state["speed"].metrics if state["speed"].metrics else None
-            # TODO: maybe also disble when trip running
-            if speed is not None and speed.current is not None:
-                if speed.current > 5 and not self.disabledBtns:
-                    self.replayBtn.set_disabled(True)
-                    self.settingsBtn.set_disabled(True)
-                elif speed.current <= 5 and not self.disabledBtns:
-                    self.replayBtn.set_disabled(False)
-                    self.settingsBtn.set_disabled(False)
-            else:
-                self.replayBtn.set_disabled(False)
-                self.settingsBtn.set_disabled(False)
+            # speed = state["speed"].metrics if state["speed"].metrics else None
+            # # TODO: maybe also disble when trip running
+            # if speed is not None and speed.current is not None:
+            #     if speed.current > 5 and not self.disabledBtns:
+            #         self.replayBtn.set_disabled(True)
+            #         self.settingsBtn.set_disabled(True)
+            #     elif speed.current <= 5 and not self.disabledBtns:
+            #         self.replayBtn.set_disabled(False)
+            #         self.settingsBtn.set_disabled(False)
+            # else:
+            #     self.replayBtn.set_disabled(False)
+            #     self.settingsBtn.set_disabled(False)
 
             # freshness = state["freshness"]
             # if freshness is not None:

@@ -114,11 +114,11 @@ class RealTimeScreen(Screen):
         gearBox = Widget(size=(Window.width/4, Window.height - self.topbar.height - Window.height/10), pos=(3*Window.width/4, self.topbar.height))
         self.estGearLabel = Label(text="N",
                                 size=(185, 40), 
-                                pos=(gearBox.pos[0], gearBox.pos[1] + 300),
+                                pos=(gearBox.pos[0] + 10, gearBox.pos[1] + 325),
                                 color=(0, 0, 0, 1),
-                                font_size=64)
+                                font_size=48)
         
-        gears = GridLayout(cols=2, size=(185, 300),pos=(gearBox.pos[0] + 15, gearBox.pos[1] - 30), spacing=8, padding=8)
+        gears = GridLayout(cols=2, size=(Window.width/4, Window.height/2),pos=(gearBox.pos[0], gearBox.pos[1]  + Window.height/6), spacing=8, padding=8)
         for i in range(1, 7):
             btn = Button(text=f"{i}",
             size_hint=(None, None),  
@@ -189,18 +189,18 @@ class RealTimeScreen(Screen):
 
         self.content.add_widget(self.driverTitle)
 
-        activeDriveBtn = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(0, 0))
+        activeDriveBtn = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 2, Window.height/10), pos=(0, 0))
         activeDriveBtn.set_disabled(True)
 
-        vehicleStateBtn = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 4, 0))
+        vehicleStateBtn = Button(text="Vehicle State", size_hint=(None, None), size=(Window.width / 2, Window.height/10), pos=(Window.width / 2, 0))
         vehicleStateBtn.bind(on_press=lambda instance: self.swap_screen('vehicleState'))
         
 
-        self.disabledBtns = False
-        self.replayBtn = Button(text="Replay", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
-        self.settingsBtn = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
+        # self.disabledBtns = False
+        # self.replayBtn = Button(text="Replay", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(Window.width / 2, 0))
+        # self.settingsBtn = Button(text="Settings", size_hint=(None, None), size=(Window.width / 4, Window.height/10), pos=(3 * Window.width / 4, 0))
 
-        for btn in [activeDriveBtn, vehicleStateBtn, self.replayBtn, self.settingsBtn]:
+        for btn in [activeDriveBtn, vehicleStateBtn]:
             btn.background_normal = ''
             btn.background_color = (1, 1, 1, 1)
             btn.color = (0, 0, 0, 1)
@@ -208,13 +208,13 @@ class RealTimeScreen(Screen):
 
         with self.content.canvas:
             Color(0, 0, 0, 1)
-            Line(points=[0, 180, 3 * Window.width / 4, 180, 3 * Window.width / 4, 0], width=1)
+            Line(points=[0, 180, 3 * Window.width / 4, 180, 3 * Window.width / 4, Window.height/10], width=1)
             Line(points=[Window.width/2, 180, Window.width/2, 0], width=1)
             Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
             Line(points=[Window.width, 0, 0, 0], width=1)
             Line(points=[0, Window.height/10, 0, 0], width=1)
             Line(points=[Window.width, Window.height/10, Window.width, 0], width=1)
-            Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
+            # Line(points=[Window.width/4, Window.height/10, Window.width/4, 0], width=1)
 
 
         self.boxLayout.add_widget(self.content)
@@ -241,7 +241,17 @@ class RealTimeScreen(Screen):
     
         state = self.analyser.get_most_recent()
         if state is None:
+            self.speedLabel.text = "0 km/h"
+            self.accMet.label.text = "0.00 m/s²"
+            self.tach.set_target_rpm(0)
+            self.tach.rpmLabel.text = "0 RPM"
+            self.voltMet.label.text = "-- V"
+            self.tempMet.label.text = "-- °C"
+            self.instConsLabel.text = "Inst: 0.00"
+            self.aveConsLabel.text = "Ave: 0.00"
+            self.estGearLabel.text = "N"
             return
+
 
         self.topbar.update_topBar(state)
 
@@ -249,7 +259,7 @@ class RealTimeScreen(Screen):
             # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
         #    print(shadow.powertrain)
-            self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
+            # self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
 
             state = self.analyser.get_most_recent()
             if state is None:
@@ -264,16 +274,16 @@ class RealTimeScreen(Screen):
             speed = state["speed"].metrics if state["speed"].metrics else None
             if speed is not None and speed.current is not None:
                 self.speedLabel.text = f"{int(speed.current)} km/h"
-                if speed.current > 5 and not self.disabledBtns:
-                    self.replayBtn.set_disabled(True)
-                    self.settingsBtn.set_disabled(True)
-                elif speed.current <= 5 and not self.disabledBtns:
-                    self.replayBtn.set_disabled(False)
-                    self.settingsBtn.set_disabled(False)
+                # if speed.current > 5 and not self.disabledBtns:
+                #     self.replayBtn.set_disabled(True)
+                #     self.settingsBtn.set_disabled(True)
+                # elif speed.current <= 5 and not self.disabledBtns:
+                #     self.replayBtn.set_disabled(False)
+                #     self.settingsBtn.set_disabled(False)
             else:
                 self.speedLabel.text = "0 km/h"
-                self.replayBtn.set_disabled(False)
-                self.settingsBtn.set_disabled(False)
+                # self.replayBtn.set_disabled(False)
+                # self.settingsBtn.set_disabled(False)
 
             accStr = " 0.00 m/s²"
             if speed and speed.wAvgROC is not None:
