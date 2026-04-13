@@ -111,7 +111,7 @@ class RealTimeScreen(Screen):
         self.boxLayout.add_widget(self.topbar)
         self.content = Widget()
 
-        gearBox = Widget(size=(185, 390), pos=(610,42))
+        gearBox = Widget(size=(Window.width/4, Window.height - self.topbar.height - Window.height/10), pos=(3*Window.width/4, self.topbar.height))
         self.estGearLabel = Label(text="N",
                                 size=(185, 40), 
                                 pos=(gearBox.pos[0], gearBox.pos[1] + 300),
