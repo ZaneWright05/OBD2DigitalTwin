@@ -30,7 +30,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 
 from time import time
 from tachometer import Tachometer
-from topbar import TopBar
+from topbar import TopBar, EventWidget
 
 import sys
 from pathlib import Path
@@ -67,9 +67,6 @@ class VehicleStateScreen(Screen):
         vehicleStateBtn = Button(text="Vehicle State")
         vehicleStateBtn.set_disabled(True)
 
-        # self.replayBtn = Button(text="Replay")
-        # self.settingsBtn = Button(text="Settings")
-
         self._last_trip_btn_press_s = 0.0
 
         self.content = BoxLayout(
@@ -89,6 +86,7 @@ class VehicleStateScreen(Screen):
             btn.color = (0, 0, 0, 1)
             btn.size_hint = (1, 1)
             bottomBar.add_widget(btn)
+
         # shadows
         imgBox = BoxLayout(
             orientation='vertical',
@@ -97,7 +95,7 @@ class VehicleStateScreen(Screen):
 
         labelBox = BoxLayout(
             orientation='vertical',
-            size_hint=(0.75, 1)
+            size_hint=(0.25, 1)
         )
 
         operationalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
@@ -157,14 +155,37 @@ class VehicleStateScreen(Screen):
         self.content.add_widget(imgBox)
         self.content.add_widget(labelBox)
 
+        eventBox = BoxLayout(orientation='vertical', size_hint=(0.5, 1), spacing=5, padding=(5,5,5,5))
+        eventWidget = EventWidget(width=Window.width*0.5 - 10)
+        eventWidget.hide()
+        eventWidget2 = EventWidget(width=Window.width*0.5 - 10)
+        eventWidget2.hide()
+        eventWidget3 = EventWidget(width=Window.width*0.5 - 10)
+        eventWidget3.hide()
+        eventWidget4 = EventWidget(width=Window.width*0.5 - 10)
+        eventWidget4.hide()
+        eventWidget5 = EventWidget(width=Window.width*0.5 - 10)
+        eventWidget5.hide()
+
+        self.eventWidgets = [eventWidget, eventWidget2, eventWidget3, eventWidget4, eventWidget5]
+        self.eventsStored = {}
+        
+        eventBox.add_widget(eventWidget)
+        eventBox.add_widget(eventWidget2)
+        eventBox.add_widget(eventWidget3)
+        eventBox.add_widget(eventWidget4)
+        eventBox.add_widget(eventWidget5)
+        
+        self.content.add_widget(eventBox)
 
         self.boxLayout.add_widget(self.content)
+
         self.boxLayout.add_widget(bottomBar)
         self.add_widget(self.boxLayout)
 
         with self.boxLayout.canvas.after:
             Color(0, 0, 0, 1)
-            Line(points=[3 * Window.width / 4, Window.height - self.topbar.height, 3 * Window.width / 4, Window.height/10], width=1)
+            Line(points=[ Window.width /2, Window.height - self.topbar.height, Window.width / 2, Window.height/10], width=1)
             # button borders
             Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
             Line(points=[Window.width, 0, 0, 0], width=1)
@@ -174,6 +195,19 @@ class VehicleStateScreen(Screen):
             Line(points=[Window.width/2, Window.height/10, Window.width/2, 0], width=1)
 
         Clock.schedule_interval(self.refresh, 0.1)
+
+    def reset(self):
+        self.currentOperationalState = "Unknown"
+        self.opImg.source = os.path.join("assets","operationalState", "unknownState.png")
+        self.opLabel.text = self.currentOperationalState
+
+        self.currentPowertrainState = "Unknown"
+        self.ptImg.source = os.path.join("assets","powertrainState", "unknownState.png")
+        self.ptLabel.text = self.currentPowertrainState
+
+        self.currentThermalState = "Unknown"
+        self.thImg.source = os.path.join("assets","thermalState", "thermUnknown.png")
+        self.thLabel.text = self.currentThermalState
 
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
@@ -188,6 +222,17 @@ class VehicleStateScreen(Screen):
             else:
                 self.topbar.update_topBar(state)
             self.screenManager.current = screen_name
+
+    def refresh_events(self):
+        # Sort events by timestamp
+        sorted_events = sorted(self.eventsStored.values(), key=lambda e: e.timestamp, reverse=True)
+
+        for i, widget in enumerate(self.eventWidgets):
+            if i < len(sorted_events):
+                widget.update(sorted_events[i])
+                widget.show() 
+            else:
+                widget.hide()
 
     def thermal_to_img(self, thermal):
         if thermal == self.currentThermalState:
@@ -248,8 +293,8 @@ class VehicleStateScreen(Screen):
         self.opLabel.text = operational
 
     def refresh(self, dt):
-        if self.screenManager.current != 'vehicleState':
-            return
+        # if self.screenManager.current != 'vehicleState':
+        #     return
         
         state = self.analyser.get_most_recent()
         if state is None:
@@ -278,37 +323,13 @@ class VehicleStateScreen(Screen):
             # if self.topbar.tripButton.text != "Stop Trip":
             #     self.topbar.tripButton.text = "Stop Trip"
 
-            state = self.analyser.get_most_recent()
-            if state is None:
-                return
-            # self.topbar.timeLabel.text = state["time"]
-            # self.topbar.distLabel.text = f"{state['distance']} km"
+            # state = self.analyser.get_most_recent()
+            # if state is None:
+            #     return
 
-
-            # speed = state["speed"].metrics if state["speed"].metrics else None
-            # # TODO: maybe also disble when trip running
-            # if speed is not None and speed.current is not None:
-            #     if speed.current > 5 and not self.disabledBtns:
-            #         self.replayBtn.set_disabled(True)
-            #         self.settingsBtn.set_disabled(True)
-            #     elif speed.current <= 5 and not self.disabledBtns:
-            #         self.replayBtn.set_disabled(False)
-            #         self.settingsBtn.set_disabled(False)
-            # else:
-            #     self.replayBtn.set_disabled(False)
-            #     self.settingsBtn.set_disabled(False)
-
-            # freshness = state["freshness"]
-            # if freshness is not None:
-            #     if freshness > 0.95:
-            #         self.topbar.set_signal("high")
-            #     elif freshness > 0.33:
-            #         self.topbar.set_signal("medium")
-            #     else:
-            #         self.topbar.set_signal("low")
-
-            # event = state["event"]
-            # if event is None:
+            self.eventsStored = state["allEvents"]
+            if self.eventsStored is not None:
+                self.refresh_events()
             #     if not self.topbar.eventLabelHidden:
             #         self.topbar.eventLabelHidden = True
             #         self.topbar.eventLabel.opacity = 0

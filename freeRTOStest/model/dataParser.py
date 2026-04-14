@@ -100,12 +100,16 @@ class Parser:
         self.lastEvent = None
         self.lastEventEndTime = 0 
         self.displayTime = 4 # in seconds
-        
+        self.eventsStored = {}
+        self.maxEvents = 5
+
+
         self.fuelCons = None
         
         self.gearEstimator = GearEstimator()
         self.currentGear = (None, None)
         self.currentGRatio = None
+
 
     def save_HistoricMetrics(self):
         if self.tripStartTime is None or self.serial is None:
@@ -253,6 +257,15 @@ class Parser:
         sorted_events = sorted(events, key=lambda event: (event.timestamp, event.priority))
         return sorted_events
 
+    def update_events(self, new_events):
+        for event in new_events:
+            key = (event.pid, event.timestamp)
+            if key not in self.eventsStored:
+                if len(self.eventsStored) >= self.maxEvents:
+                    oldest_key = min(self.eventsStored, key=lambda k: self.eventsStored[k].timestamp)
+                    del self.eventsStored[oldest_key]
+                self.eventsStored[key] = event
+
     def get_most_recent(self):
         if not self.connected:
             return None
@@ -267,6 +280,7 @@ class Parser:
             time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
             sortedEvents = self.get_sorted_events()
+            self.update_events(sortedEvents)
             if sortedEvents:
                 recentEvent = sortedEvents[-1]
             else:
@@ -295,7 +309,7 @@ class Parser:
                 "temp": self.tempMetric,
                 "volt": self.voltMetric,
                 "event": recentEvent,
-                "allEvents": sortedEvents,
+                "allEvents": self.eventsStored,
                 "fuelCons": self.fuelConsMetric,  
                 "gear": self.currentGear[0],
                 "ratio": self.currentGRatio,
@@ -394,6 +408,7 @@ class Parser:
 
             self.tripStartTime = time.monotonic()
             self.distanceTravelled_km = 0.0
+            self.eventsStored = {}
 
     def start_trip(self):
         if self.state != ConnectionState.CONNECTED or not self.connected:

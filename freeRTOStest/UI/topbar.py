@@ -126,35 +126,9 @@ class TopBar(BoxLayout):
 
         self.eventLabelHidden = False
 
-        self.eventLabel = Label(
-            text="",
-            size_hint=(None, None),   
-            pos_hint={"center_y": 0.5},
-            color=(1, 1, 1, 1),
-            font_size=14,
-            halign="left",
-            valign="middle",
-            shorten=True,
-            shorten_from="right",
-            max_lines=1
-        )
-
-        with self.eventLabel.canvas.before:
-            Color(142/255, 140/255, 140/255, 1)
-            self.eventBg = RoundedRectangle(
-                pos=self.eventLabel.pos,
-                size=self.eventLabel.size,
-                radius=[8, 8, 8, 8]
-            )
-
-        self.eventLabel.bind(text=self.update_event_pill, pos=self.update_event_bg, size=self.update_event_bg)
-        self.bind(height=self.update_event_pill)
-
-        self.update_event_pill()
-        self.update_event_bg()
-
+        self.eventWidget = EventWidget()
         self.add_widget(self.leftImgs)
-        self.add_widget(self.eventLabel)
+        self.add_widget(self.eventWidget)
         self.add_widget(Widget(size_hint=(1, 1)))
         self.add_widget(self.rightContent)
 
@@ -179,16 +153,6 @@ class TopBar(BoxLayout):
         self.rect.size = self.size
         self.border.rectangle = (self.x, self.y, self.width, self.height)
 
-    def update_event_pill(self, *args):
-        fixed_w = 250
-        h = self.height - 6
-        if self.eventLabel.size != (fixed_w, h):
-            self.eventLabel.size = (fixed_w, h)
-        self.eventLabel.text_size = (fixed_w - 20, h)
-
-    def update_event_bg(self, *args):
-        self.eventBg.pos = self.eventLabel.pos
-        self.eventBg.size = self.eventLabel.size
 
     def stop_start_button_handler(self):
         now = time()
@@ -200,7 +164,7 @@ class TopBar(BoxLayout):
             if self.analyser.running:
                 if(self.analyser.stop_trip()):    
                     self.tripButton.text = "Start Trip"
-                    self.set_event_text("Trip stopped, saving data...") # TODO: list as event so it dissapears
+                    self.eventWidget.set_event_text("Trip stopped, data saved") # TODO: list as event so it dissapears
                     speed = self.analyser.speedMetric.metrics.average
                     historic_speed = 0
                     self.show_comparison_popup(speed, historic_speed)
@@ -208,16 +172,13 @@ class TopBar(BoxLayout):
                 if(self.analyser.start_trip()):
                     self.vehicleState.reset_state()
                     self.tripButton.text = "Stop Trip"
-                    self.set_event_text("Trip started, collecting data...")
+                    self.eventWidget.set_event_text("Trip started, collecting data...")
     
     def update_stop_start_btn(self):
         if self.analyser.running and self.tripButton.text != "Stop Trip":
             self.tripButton.text = "Stop Trip"
         elif not self.analyser.running and self.tripButton.text != "Start Trip":
             self.tripButton.text = "Start Trip"
-
-    def set_event_text(self, msg):
-        self.eventLabel.text = msg
 
     def show_comparison_popup(self, current_value, historic_value):
         
@@ -288,18 +249,22 @@ class TopBar(BoxLayout):
             if event is None:
                 if not self.eventLabelHidden:
                     self.eventLabelHidden = True
-                    self.eventLabel.opacity = 0
-                    self.eventLabel.disabled = True
-                    self.set_event_text("")
+                    self.eventWidget.opacity = 0
+                    self.eventWidget.disabled = True
+                    self.eventWidget.set_event_text("")
             else:
                 self.eventLabelHidden = False
-                self.eventLabel.opacity = 1
-                self.eventLabel.disabled = False
-                # print(f"Event detected in UI: {event}")
-                endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+                self.eventWidget.opacity = 1
+                self.eventWidget.disabled = False
+                if event.priority == 0:
+                    self.eventWidget.set_bg_colour((142 / 255, 140 / 255, 140 / 255, 1)) # grey
+                elif event.priority == 1: 
+                    self.eventWidget.set_bg_colour((255/255,115/255,0/255, 1)) # orange
+                else:
+                    self.eventWidget.set_bg_colour((255/255,0/255,0/255, 1)) # red
                 startTime_ms = event.timestamp * event.pid.period_ms
                 startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-                self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+                self.eventWidget.set_event_text(f"[{startTime}] {event.pid.name} - {event.type}")
 
             self.timeLabel.text = state.get("time", "00:00:00")
             self.distLabel.text = f"{state.get('distance', '00.00')} km"
@@ -310,3 +275,82 @@ class TopBar(BoxLayout):
             self.set_signal("low")
             self.timeLabel.text = "00:00:00"
             self.distLabel.text = "00.00 km"
+
+class EventWidget(BoxLayout):
+    def __init__(self, width=250, bgCol=(142 / 255, 140 / 255, 140 / 255, 1), **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (None, 0.8)
+        self.width = width
+        self.pos_hint = {"center_y": 0.5}
+        self.bgCol = bgCol
+        self.orientation = "horizontal"
+        self.padding = (10, 0)
+        self.spacing = 5
+
+        with self.canvas.before:
+            Color(*self.bgCol)
+            self.background = RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[8, 8, 8, 8]
+            )
+
+        self.label = Label(
+            text="",
+            size_hint=(1, 1),
+            color=(1, 1, 1, 1),
+            font_size=14,
+            halign="left",
+            valign="middle",
+            shorten=True,
+            shorten_from="right",
+            max_lines=1
+        )
+        self.label.bind(size=self.update_label_text_size)
+        self.add_widget(self.label)
+
+        self.bind(pos=self.update_background, size=self.update_background)
+
+    def update(self, event):
+        if event.priority == 0:
+                    self.set_bg_colour((142 / 255, 140 / 255, 140 / 255, 1)) # grey
+        elif event.priority == 1: 
+            self.set_bg_colour((255/255,115/255,0/255, 1)) # orange
+        else:
+            self.set_bg_colour((255/255,0/255,0/255, 1)) # red
+                # print(f"Event detected in UI: {event}")
+        endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+        startTime_ms = event.timestamp * event.pid.period_ms
+        startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
+        self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+
+
+    def hide(self):
+        self.opacity = 0
+        self.disabled = True
+
+    def show(self):
+        self.opacity = 1
+        self.disabled = False
+
+    def update_background(self, *args):
+        self.background.pos = self.pos
+        self.background.size = self.size
+
+    def update_label_text_size(self, *args):
+        self.label.text_size = (self.label.width - 20, self.label.height)
+
+    def set_event_text(self, text):
+        self.label.text = text
+        self.update_label_text_size()
+
+    def set_bg_colour(self, bgCol):
+        self.bgCol = bgCol
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*self.bgCol)
+            self.background = RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[8, 8, 8, 8]
+            )
