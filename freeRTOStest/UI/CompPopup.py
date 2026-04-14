@@ -5,6 +5,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.graphics import Color, Line, Rectangle
+from time import time
 
 import sys
 from pathlib import Path
@@ -19,7 +20,8 @@ class ComparisonPopup(ModalView):
         self.background = ''
         self.background_color = (0.7, 0.7, 0.7, 1)
         self.padding = (0, 0, 0, 0)
-        
+        self._last_trip_btn_press_s = 0.0
+
         popupX = Window.width * 0.05 
         popupY = Window.height * 0.05 
         popupWidth = Window.width * 0.9
@@ -65,7 +67,7 @@ class ComparisonPopup(ModalView):
         self.insights.add_widget(Label(text="Further Insights:", bold=True, color=(0, 0, 0, 1)))
         self.insights.add_widget(Label(text="Trip Max: 0, Hist Max: 0", color=(0, 0, 0, 1)))
         self.insights.add_widget(Label(text="Trip Min: 0, Hist Min: 0", color=(0, 0, 0, 1)))
-        self.insights.add_widget(Label(text="Trip ROC: 0, Hist ROC: 0", color=(0, 0, 0, 1)))
+        self.insights.add_widget(Label(text="Trip Ave ROC: 0, Hist Ave ROC: 0", color=(0, 0, 0, 1)))
         self.update_insights(self.tablePos)
         layout.add_widget(self.insights)
 
@@ -112,6 +114,10 @@ class ComparisonPopup(ModalView):
             rect.size = (self.table.width, row_height)
 
     def next_metric(self):
+        now = time()
+        if (now - self._last_trip_btn_press_s) < 0.35:
+            return
+        self._last_trip_btn_press_s = now
         self.tablePos += 1
         metric_1 = self.tablePos % len(self.metrics)
         metric_2 = (self.tablePos + 1) % len(self.metrics)
@@ -119,6 +125,10 @@ class ComparisonPopup(ModalView):
         self.update_insights(metric_1)
 
     def prev_metric(self):
+        now = time()
+        if (now - self._last_trip_btn_press_s) < 0.35:
+            return
+        self._last_trip_btn_press_s = now
         self.tablePos = (self.tablePos - 1) % len(self.metrics)
         metric_1 = self.tablePos % len(self.metrics)
         metric_2 = (self.tablePos + 1) % len(self.metrics)
@@ -131,7 +141,7 @@ class ComparisonPopup(ModalView):
         self.insights.add_widget(Label(text=f"Trip Max: {self.metrics[pos].max:.2f}, Hist Max: {self.metrics[pos].histMax:.2f}" if self.metrics[pos].histMax is not None else "N/A", color=(0, 0, 0, 1)))
         self.insights.add_widget(Label(text=f"Trip Min: {self.metrics[pos].min:.2f}, Hist Min: {self.metrics[pos].histMin:.2f}" if self.metrics[pos].histMin is not None else "N/A", color=(0, 0, 0, 1)))
         if self.metrics[pos].hasRoc:
-            self.insights.add_widget(Label(text=f"Trip ROC: {self.metrics[pos].rocAvg:.2f}, Hist ROC: {self.metrics[pos].histRocAvg:.2f} " if self.metrics[pos].histRocAvg is not None else "N/A", color=(0, 0, 0, 1)))
+            self.insights.add_widget(Label(text=f"Trip Ave ROC: {self.metrics[pos].rocAvg:.2f}, Hist Ave ROC: {self.metrics[pos].histRocAvg:.2f} " if self.metrics[pos].histRocAvg is not None else "N/A", color=(0, 0, 0, 1)))
 
     def update_table(self, one, two):
         self.table.clear_widgets()

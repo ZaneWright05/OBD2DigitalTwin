@@ -58,6 +58,7 @@ class MetricAnalyser:
 
         self.allowZero = allowZero # flag for metrics where 0 isnt no data e.g temp or a %, but RPM is 0 meaning no data
         self.global_sum = 0.0
+        self.roc_global_sum = 0.0
         self.global_count = 0
 
         self.conversionFactor = conversionFactor
@@ -113,7 +114,7 @@ class MetricAnalyser:
             self.historicMetrics.tripCount += 1
 
             self.historicMetrics.sumAverage += self.metrics.average # update running sum
-            self.historicMetrics.sumWAvgROC += self.metrics.wAvgROC
+            self.historicMetrics.sumWAvgROC += self.single_trip_roc_average()
             self.historicMetrics.sumInstROC += self.metrics.instROC
 
             # update historic metrics averages
@@ -132,6 +133,9 @@ class MetricAnalyser:
             self.historicMetrics.minWAvgROC = min(self.historicMetrics.minWAvgROC, self.metrics.minWAvgROC)
         return self.historicMetrics
 
+    def single_trip_roc_average(self):
+        return self.roc_global_sum/self.global_count if self.global_count != 0 else 0.0
+    
     def all_trip_average(self):
         if self.historicMetrics and self.historicMetrics.tripCount > 0:
             if(self.metrics.average == 0): # if no current data, return historic average
@@ -203,8 +207,9 @@ class MetricAnalyser:
             self.metrics.instROC = 0.0
             self.metrics.wAvgROC = 0.0
 
-        self.metrics.wAvgROC = self.applySGFilter()
-
+        wAvgROC = self.applySGFilter()
+        self.metrics.wAvgROC = wAvgROC
+        self.roc_global_sum += wAvgROC
         
         self.metrics.minInstROC = min(self.metrics.minInstROC, self.metrics.instROC) if self.metrics.minInstROC != float('inf') else self.metrics.instROC
         self.metrics.maxInstROC = max(self.metrics.maxInstROC, self.metrics.instROC) if self.metrics.maxInstROC != float('-inf') else self.metrics.instROC

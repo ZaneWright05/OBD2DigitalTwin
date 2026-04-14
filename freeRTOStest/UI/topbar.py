@@ -226,7 +226,7 @@ class TopBar(BoxLayout):
         comparsionPoints.append(ComparisonPoint(
             pidName="Accel",
                 pidUnit="m/s²",
-                average=speedMetric.metrics.wAvgROC,
+                average=speedMetric.single_trip_roc_average(),
                 histAvg=speedMetric.historicMetrics.wAvgROC if speedMetric.historicMetrics is not None else 0,
                 min=speedMetric.metrics.minWAvgROC,
                 histMin=speedMetric.historicMetrics.minWAvgROC if speedMetric.historicMetrics is not None else 0,
