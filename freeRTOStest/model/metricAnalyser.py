@@ -185,7 +185,7 @@ class MetricAnalyser:
 
         self.sliding_window.append((seq, value/ self.conversionFactor))
         self.metrics.window_Avg = self.window_sum / len(self.sliding_window) if self.sliding_window else 0.0
-        self.metrics.average = self.global_sum / self.global_count if self.global_count != 0 else 0.0 # seq is a proxy for num of data points
+        self.metrics.average = self.global_sum / self.global_count if self.global_count != 0 else 0.0
 
         self.metrics.min = min(self.metrics.min, value) if self.metrics.min != float('inf') else value
         self.metrics.max = max(self.metrics.max, value) if self.metrics.max != float('-inf') else value

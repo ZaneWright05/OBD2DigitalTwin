@@ -24,6 +24,19 @@ class ThermalPoint(MetricPoint):
     overheatThreshold: float | None = None
     tempLowThreshold: float | None = None
 
+@dataclass
+class ComparisonPoint:
+    pidName: str
+    pidUnit: str
+    average: float
+    histAvg: float
+    min: float
+    histMin: float
+    max: float
+    histMax: float
+    hasRoc: bool
+    rocAvg: float
+    histRocAvg: float
 
 @dataclass
 class TelemetrySnapshot:
@@ -43,25 +56,25 @@ class pid:
     period_ms: int
 
 PIDS = {
-    "0x0C": pid("RPM", 2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
+    "0x0C": pid("Eng Speed", 2, "rpm", lambda a,b: ((a * 256) + b )/ 4, 333),
     "0x0D": pid("Speed", 1, "kmh", lambda a,b: a, 333),
 
     "0x11": pid("Throttle", 1, "%", lambda a,b: (a * 100)/255, 500),
-    "0x05": pid("Engine Coolant Temperature", 1, "C", lambda a,b : a - 40, 500),
+    "0x05": pid("Coolant Temp", 1, "C", lambda a,b : a - 40, 500),
     "0x04": pid("Engine Load", 1, "%", lambda a,b: (a * 100)/255, 500),
 
     "0x10": pid("Mass Air Flow", 2, "g/s", lambda a,b : ((256 * a) + b)/100,1000),
     "0x42": pid("Battery Voltage", 2, "V", lambda a,b: ((256* a) + b)/1000, 1000),
     
-    "0x0F": pid("Intake Air Temperature", 1, "C", lambda a,b : a - 40,2000),
-    "0x23": pid("Intake Manifold Pressure", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
+    "0x0F": pid("Intake Air Temp", 1, "C", lambda a,b : a - 40,2000),
+    "0x23": pid("Intake Manifold Pres", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
 
     "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
     }
 
 FUELCONSPID = "0xFF"
 COMPUTEDPIDS = {
-    "0xFF" : pid("Instantaneous Fuel Consumption", 2, "l/100km", lambda speed, speedSeq, maf, mafSeq: speed, max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
+    "0xFF" : pid("Inst Fuel Cons", 2, "l/100km", lambda speed, speedSeq, maf, mafSeq: speed, max(PIDS["0x0D"].period_ms, PIDS["0x10"].period_ms, PIDS["0x04"].period_ms))
 }
 
 # ranges from https://caracaltech.com/articles/article/627981fe2fb15a8d9e50f99c

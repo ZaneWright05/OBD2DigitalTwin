@@ -6,7 +6,8 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.button import Button
-
+from CompPopup import ComparisonPopup
+from model.helpers import ComparisonPoint
 # from model.dataParser import Parser
 # from model.vehicleState import VehicleState
 
@@ -200,7 +201,10 @@ class TopBar(BoxLayout):
                 if(self.analyser.stop_trip()):    
                     self.tripButton.text = "Start Trip"
                     self.set_event_text("Trip stopped, saving data...") # TODO: list as event so it dissapears
-            else:
+                    speed = self.analyser.speedMetric.metrics.average
+                    historic_speed = 0
+                    self.show_comparison_popup(speed, historic_speed)
+            else:   
                 if(self.analyser.start_trip()):
                     self.vehicleState.reset_state()
                     self.tripButton.text = "Stop Trip"
@@ -214,6 +218,50 @@ class TopBar(BoxLayout):
 
     def set_event_text(self, msg):
         self.eventLabel.text = msg
+
+    def show_comparison_popup(self, current_value, historic_value):
+        
+        comparsionPoints = []
+        speedMetric = self.analyser.speedMetric
+        comparsionPoints.append(ComparisonPoint(
+            pidName="Accel",
+                pidUnit="m/s²",
+                average=speedMetric.metrics.wAvgROC,
+                histAvg=speedMetric.historicMetrics.wAvgROC if speedMetric.historicMetrics is not None else 0,
+                min=speedMetric.metrics.minWAvgROC,
+                histMin=speedMetric.historicMetrics.minWAvgROC if speedMetric.historicMetrics is not None else 0,
+                max=speedMetric.metrics.maxWAvgROC,
+                histMax=speedMetric.historicMetrics.maxWAvgROC if speedMetric.historicMetrics is not None else 0,
+                hasRoc=False,
+                rocAvg=None,
+                histRocAvg=None
+            )
+            )
+        for metric in self.analyser.metrics.values():
+            comparsionPoints.append(ComparisonPoint(
+                pidName=metric.pid.name,
+                pidUnit=metric.pid.unit,
+                average=metric.metrics.average,
+                histAvg=metric.historicMetrics.average if metric.historicMetrics is not None else 0,
+                min=metric.metrics.min,
+                histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
+                max=metric.metrics.max,
+                histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
+                hasRoc=True if metric.pid.name != "Speed" else False, # ROC is acc which has own comp point
+                rocAvg=metric.metrics.wAvgROC,
+                histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
+            )
+            )
+
+        print("Showing popup")
+        # Create and open the popup
+        popup = ComparisonPopup(
+            # title="Comparison Result",
+                    #   content=content,
+                    #   size_hint=(0.8, 0.4),
+                      metrics=comparsionPoints,
+                      auto_dismiss=False)
+        popup.open()
 
     def update_topBar(self, state):
         self.update_stop_start_btn()
