@@ -184,10 +184,20 @@ class RealTimeScreen(Screen):
         self.content.add_widget(self.aveConsLabel)
         self.content.add_widget(constUnitLabel2)
 
-        self.driverTitle = Label(text="Driver Score", size_hint=(None, None), color=(0, 0, 0, 1), font_size=26)
-        self.driverTitle.pos=(self.driverTitle.width, 165 - self.driverTitle.height)
+        engLoadTitle = Label(text="Eng. Load", size_hint=(None, None), color=(0, 0, 0, 1), font_size=20)
+        engLoadTitle.pos = (0, 180 - (engLoadTitle.height/1.5))
+        self.engLoadLabel = Label(text="-- %", size_hint=(None, None), color=(0, 0, 0, 1), font_size=32)
+        self.engLoadLabel.pos = (Window.width/8 - self.engLoadLabel.width/2, 180 - 1.25*(self.engLoadLabel.height))
 
-        self.content.add_widget(self.driverTitle)
+        thrttleTitle = Label(text="Throttle", size_hint=(None, None), color=(0, 0, 0, 1), font_size=20)
+        thrttleTitle.pos = (Window.width/4, 180 - (thrttleTitle.height/1.5))
+        self.throttleLabel = Label(text="-- %", size_hint=(None, None), color=(0, 0, 0, 1), font_size=32)
+        self.throttleLabel.pos = (3*(Window.width/8) - self.throttleLabel.width/2, 180 - 1.25*(self.throttleLabel.height))
+
+        self.content.add_widget(engLoadTitle)
+        self.content.add_widget(self.engLoadLabel)
+        self.content.add_widget(thrttleTitle)
+        self.content.add_widget(self.throttleLabel)
 
         activeDriveBtn = Button(text="Active Drive", size_hint=(None, None), size=(Window.width / 2, Window.height/10), pos=(0, 0))
         activeDriveBtn.set_disabled(True)
@@ -209,6 +219,7 @@ class RealTimeScreen(Screen):
         with self.content.canvas:
             Color(0, 0, 0, 1)
             Line(points=[0, 180, 3 * Window.width / 4, 180, 3 * Window.width / 4, Window.height/10], width=1)
+            Line(points=[Window.width/4, 180, Window.width/4, Window.height/10], width=1)
             Line(points=[Window.width/2, 180, Window.width/2, 0], width=1)
             Line(points=[0, Window.height/10, Window.width, Window.height/10], width=1)
             Line(points=[Window.width, 0, 0, 0], width=1)
@@ -250,40 +261,23 @@ class RealTimeScreen(Screen):
             self.instConsLabel.text = "Inst: 0.00"
             self.aveConsLabel.text = "Ave: 0.00"
             self.estGearLabel.text = "N"
+            self.engLoadLabel.text = "-- %"
+            self.throttleLabel.text = "-- %"
             return
-
 
         self.topbar.update_topBar(state)
 
         if self.analyser.connected and self.analyser.running:
-            # update vehicle state
-            shadow =self.vehicleState.update(self.analyser.get_snapshot())
-        #    print(shadow.powertrain)
-            # self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
 
             state = self.analyser.get_most_recent()
             if state is None:
                 return
-            # self.topbar.timeLabel.text = state["time"]
-            # self.topbar.distLabel.text = f"{state['distance']} km"
-
-            # if self.topbar.tripButton.text != "Stop Trip":
-            #     self.topbar.tripButton.text = "Stop Trip"
                 
-
             speed = state["speed"].metrics if state["speed"].metrics else None
             if speed is not None and speed.current is not None:
                 self.speedLabel.text = f"{int(speed.current)} km/h"
-                # if speed.current > 5 and not self.disabledBtns:
-                #     self.replayBtn.set_disabled(True)
-                #     self.settingsBtn.set_disabled(True)
-                # elif speed.current <= 5 and not self.disabledBtns:
-                #     self.replayBtn.set_disabled(False)
-                #     self.settingsBtn.set_disabled(False)
             else:
                 self.speedLabel.text = "0 km/h"
-                # self.replayBtn.set_disabled(False)
-                # self.settingsBtn.set_disabled(False)
 
             accStr = " 0.00 m/s²"
             if speed and speed.wAvgROC is not None:
@@ -310,36 +304,14 @@ class RealTimeScreen(Screen):
             gear = state["gear"]
             self.estGearLabel.text = f"{gear if gear != 0 else 'N'}"
 
-            # freshness = state["freshness"]
-            # if freshness is not None:
-            #     if freshness > 0.95:
-            #         self.topbar.set_signal("high")
-            #     elif freshness > 0.33:
-            #         self.topbar.set_signal("medium")
-            #     else:
-            #         self.topbar.set_signal("low")
+            load = state["load"].metrics.current if state["load"].metrics else None
+            self.engLoadLabel.text = f"{load:.0f} %" if load is not None else "-- %"
+            throttle = state["throttle"].metrics.current if state["throttle"].metrics else None
+            self.throttleLabel.text = f"{throttle:.0f} %" if throttle is not None else "-- %"
 
-            # event = state["event"]
-            # if event is None:
-            #     if not self.topbar.eventLabelHidden:
-            #         self.topbar.eventLabelHidden = True
-            #         self.topbar.eventLabel.opacity = 0
-            #         self.topbar.eventLabel.disabled = True
-            #         self.set_event_text("")
-            # else:
-            #     self.topbar.eventLabelHidden = False
-            #     self.topbar.eventLabel.opacity = 1
-            #     self.topbar.eventLabel.disabled = False
-            #     # print(f"Event detected in UI: {event}")
-            #     endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
-            #     startTime_ms = event.timestamp * event.pid.period_ms
-            #     startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-            #     self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
-        
     def update_bg_rect(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
-
 
 class MyApp(App):
     def build(self):
@@ -359,14 +331,10 @@ class MyApp(App):
         self.vehicleStateScreen = VehicleStateScreen(self.screenManager, self.analyser, self.vehicleState, name='vehicleState')
         self.screenManager.add_widget(self.vehicleStateScreen)
 
-
         print("Available screens in ScreenManager:")
         print([screen.name for screen in self.screenManager.screens])
         return self.screenManager
 
-    # def on_stop(self):
-    #     print("App is stopping")
-    #     self.analyser.save_HistoricMetrics()
 
 
 if __name__ == "__main__":

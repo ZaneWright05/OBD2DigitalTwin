@@ -86,6 +86,8 @@ class Parser:
 
         self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=6, historicMetrics=hist.get("0x42"), eventsTracked=[False, False, False, False])
 
+        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=6, historicMetrics=hist.get("0x23"), eventsTracked=[False, False, False, False])
+
         self.metrics = {
             "0x0C": self.rpmMetric,
             "0x0D": self.speedMetric,
@@ -95,6 +97,7 @@ class Parser:
             "0x0F": self.airIntakeTempMetric,
             "0x10": self.MAFMetric,
             "0x42": self.voltMetric,
+            "0x23": self.fuelRailPresMetric,
             FUELCONSPID: self.fuelConsMetric}
            
         self.lastEvent = None
@@ -193,12 +196,6 @@ class Parser:
                 self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
                 # self.loadEstimator.update(self.rpmMetric.metrics.current, value, self.speedMetric.metrics.wAvgROC)
 
-            elif pid == "0x04":
-                self.loadMetric.add_data_point(seq, value)
-                
-                # loadEstim = self.loadEstimator.estimate_load(self.rpmMetric.metrics.current, self.MAFMetric.metrics.current)
-                # if loadEstim is not None:
-                #     print(f"Actual Load: {value:.2f}%, Estimated Load: {loadEstim:.2f}%")
             else:
                 metric = self.metrics.get(pid)
                 if metric is not None:
@@ -308,6 +305,8 @@ class Parser:
                 "speed": self.speedMetric,
                 "temp": self.tempMetric,
                 "volt": self.voltMetric,
+                "load": self.loadMetric,
+                "throttle": self.throttleMetric,
                 "event": recentEvent,
                 "allEvents": self.eventsStored,
                 "fuelCons": self.fuelConsMetric,  
@@ -405,7 +404,6 @@ class Parser:
             self.currentGRatio = None
             self.lastEvent = None
             self.lastEventEndTime = 0.0
-
             self.tripStartTime = time.monotonic()
             self.distanceTravelled_km = 0.0
             self.eventsStored = {}
