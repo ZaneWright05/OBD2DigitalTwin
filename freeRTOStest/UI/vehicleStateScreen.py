@@ -93,64 +93,44 @@ class VehicleStateScreen(Screen):
             size_hint=(0.25, 1)
         )
 
-        labelBox = BoxLayout(
-            orientation='vertical',
-            size_hint=(0.25, 1)
-        )
+        labelBox = FloatLayout(pos_hint={'x': 0, 'y': 0}, size_hint=(0.25, 1))
+        # labelBox.pos = (0, 0)
 
-        operationalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
+        # operationalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
         self.currentOperationalState = "Unknown"
         self.opImg = Image(source=os.path.join("assets","operationalState", "unknownState.png"), size_hint=(None, None), height=128.1, width = 134.4, x=0, y=0)
         imgBox.add_widget(self.opImg)
 
-        opTitle = Label(text="Operational State",size_hint=(0.33, 1),color=(0,0,0,1),
-                        halign='left', valign='middle')
-        opTitle.bind(size=opTitle.setter('text_size'))
+        opTitle = Label(text="Operational State:",color=(0,0,0,1), font_size=20)
+        opTitle.pos = (Window.width/4 - opTitle.width/2, Window.height/2 - opTitle.height/4)
 
-        self.opLabel = Label(text=self.currentOperationalState,size_hint=(0.67, 1),
-                             color=(0,0,0,1),halign='left',valign='middle')
-        self.opLabel.bind(size=self.opLabel.setter('text_size'))
-    
-        operationalBox.add_widget(opTitle)
-        operationalBox.add_widget(self.opLabel)
-        labelBox.add_widget(operationalBox)
+        self.opLabel = Label(text=self.currentOperationalState, font_size=28, color=(0,0,0,1))
+        self.opLabel.pos = (Window.width/4 - self.opLabel.width/2, Window.height/2 - opTitle.height/4 - self.opLabel.height/2)
 
+        labelBox.add_widget(opTitle)
+        labelBox.add_widget(self.opLabel)
 
         self.currentPowertrainState = "Unknown"
-        powertrainBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
-
         self.ptImg = Image(source=os.path.join("assets","powertrainState", "unknownState.png"), size_hint=(None, None), height=128.1, width = 134.4)
         imgBox.add_widget(self.ptImg)
 
-        ptTitle = Label(text="Powertrain State",size_hint=(0.33, 1),color=(0,0,0,1),
-                        halign='left',valign='middle')
-        ptTitle.bind(size=ptTitle.setter('text_size'))
+        ptTitle = Label(text="Powertrain State:",color=(0,0,0,1), font_size=20)
+        ptTitle.pos = (Window.width/4 - ptTitle.width/2, Window.height/4 - ptTitle.height/3)
+        self.ptLabel = Label(text=self.currentPowertrainState,color=(0,0,0,1), font_size=28)
+        self.ptLabel.pos = (Window.width/4 - self.ptLabel.width/2, Window.height/4 - ptTitle.height/3 - self.ptLabel.height/2)
+        labelBox.add_widget(ptTitle)
+        labelBox.add_widget(self.ptLabel)
 
-        self.ptLabel = Label(text=self.currentPowertrainState,size_hint=(0.67, 1),
-                             color=(0,0,0,1),halign='left',valign='middle')
-        self.ptLabel.bind(size=self.ptLabel.setter('text_size'))
-
-        powertrainBox.add_widget(ptTitle)
-        powertrainBox.add_widget(self.ptLabel)
-        labelBox.add_widget(powertrainBox)
-
-        self.currentThermalState = "Unknown"
-        thermalBox = BoxLayout(orientation='horizontal',size_hint=(1, 1))
-        
+        self.currentThermalState = "Unknown"    
         self.thImg = Image(source=os.path.join("assets","thermalState", "thermUnknown.png"), size_hint=(None, None), height=128.1, width = 134.4)
         imgBox.add_widget(self.thImg)
         
-        thTitle = Label(text="Thermal State",size_hint=(0.33, 1),color=(0,0,0,1),
-                        halign='left',valign='middle')
-        thTitle.bind(size=thTitle.setter('text_size'))
-
-        self.thLabel = Label(text=self.currentThermalState,size_hint=(0.67, 1),
-                             color=(0,0,0,1),halign='left',valign='middle')
-        self.thLabel.bind(size=self.thLabel.setter('text_size'))
-        # thermalBox.add_widget(self.thImg)
-        thermalBox.add_widget(thTitle)
-        thermalBox.add_widget(self.thLabel)
-        labelBox.add_widget(thermalBox)
+        thTitle = Label(text="Thermal State:   ",color=(0,0,0,1), font_size=20)
+        thTitle.pos = (Window.width/4 - thTitle.width/2, -Window.height/8 + thTitle.height/6)
+        self.thLabel = Label(text=self.currentThermalState, color=(0,0,0,1), font_size=28)
+        self.thLabel.pos = (Window.width/4 - self.thLabel.width/2, -Window.height/8 + thTitle.height/6 - self.thLabel.height/2)
+        labelBox.add_widget(thTitle)
+        labelBox.add_widget(self.thLabel)
 
         self.content.add_widget(imgBox)
         self.content.add_widget(labelBox)

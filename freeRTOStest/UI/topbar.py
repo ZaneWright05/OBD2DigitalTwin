@@ -319,10 +319,10 @@ class EventWidget(BoxLayout):
         else:
             self.set_bg_colour((255/255,0/255,0/255, 1)) # red
                 # print(f"Event detected in UI: {event}")
-        endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
+        endStr = f"duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
         startTime_ms = event.timestamp * event.pid.period_ms
         startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-        self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")
+        self.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}:")
 
 
     def hide(self):

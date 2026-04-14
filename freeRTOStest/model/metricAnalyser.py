@@ -260,12 +260,10 @@ class MetricAnalyser:
             # print(f"Event {eventType}, updating values")
             currPri = event.priority
             event.length += 1
-            event.priority = pri
             event.values.append((seq, val))
             if pri > currPri:
                 event.details.append(f"{seq}: {val}, new priority: {pri}")
-            elif pri < currPri:
-                event.details.append(f"{seq}: {val}, new priority: {pri}")
+                event.priority = pri
             self.active_events[eventType] = event
         else:
             # print(f"New {eventType} event detected, creating event")
