@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from model.helpers import ComparisonPoint
 class ComparisonPopup(ModalView):
-    def __init__(self, metrics, **kwargs):
+    def __init__(self, metrics, filePath="", **kwargs,):
         super().__init__(**kwargs)
         self.size_hint = (0.9, 0.9)
         self.auto_dismiss = False
@@ -29,7 +29,7 @@ class ComparisonPopup(ModalView):
 
         layout = BoxLayout(orientation='vertical')
 
-        title = Label(text="Trip vs Historical", color=(0, 0, 0, 1), font_size='20sp', size_hint=(1, None),height=54)
+        title = Label(text=f"Trip vs Historical, file: {filePath}", color=(0, 0, 0, 1), font_size='20sp', size_hint=(1, None),height=54)
         layout.add_widget(title)
 
         header = GridLayout(cols=4, size_hint=(1, None), height=54)

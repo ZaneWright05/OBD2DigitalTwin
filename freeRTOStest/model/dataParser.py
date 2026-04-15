@@ -6,7 +6,7 @@ import joblib
 from model.gear_estimate import GearEstimator
 from model.metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
 from model.helpers import ThermalPoint, pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
-from IO.input import attempt_serial_connection, read_csv, read_packet
+from IO.input import attempt_serial_connection, read_csv, read_packet, create_log_file
 from enum import Enum, auto
 
 class ConnectionState(Enum):
@@ -19,6 +19,8 @@ class Parser:
         self.lock = threading.Lock()
         self.worker = None # thread to get data
 
+        self.filePath = None
+        self.logFile = None
 
         self.state = ConnectionState.DISCONNECTED
         self.serial = None
@@ -153,7 +155,6 @@ class Parser:
         
         return gear
 
-
     def process_packet(self, pid, data0, data1, seq):
         if PIDS.get(pid) is None:
             print(f"Unknown PID: {pid}")
@@ -176,7 +177,6 @@ class Parser:
                     self.distanceTravelled_km += (averageSpeed * timeDiff) / 1000.0
     
             elif pid == "0x0C":
-                print(f"RPM: {value} at time {seq * PIDS[pid].period_ms / 1000.0:.2f} s")
                 self.rpmMetric.add_data_point(seq, value)
                 speedVal = self.speedMetric.metrics.current
                 if speedVal != 0.00:
@@ -185,8 +185,7 @@ class Parser:
             elif pid == "0x10": # derive inst fuel cons
                 self.MAFMetric.add_data_point(seq, value)
                 self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current * 3.6, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
-            elif pid == "0x0F":
-                print(f"Intake Air Temp: {value} C at time {seq * PIDS[pid].period_ms / 1000.0:.2f} s, seq is {seq}")
+        
             else:
                 metric = self.metrics.get(pid)
                 if metric is not None:
@@ -373,6 +372,9 @@ class Parser:
             self.distanceTravelled_km = 0.0
             self.eventsStored = {}
 
+            self.filePath = None
+            self.logFile = None
+
     def start_trip(self):
         if self.state != ConnectionState.CONNECTED or not self.connected:
             return False
@@ -386,7 +388,11 @@ class Parser:
                 print(f"Exception while sending start command: {e}")
                 self.state = ConnectionState.DISCONNECTED
                 return False
-        
+            self.filePath = create_log_file()
+            self.logFile = open(self.filePath, "w")
+            self.logFile.write("PID,Data0,Data1,Seq\n")
+            self.logFile.flush()
+
         self.state = ConnectionState.ACTIVE_TRIP
         return True
 
@@ -409,6 +415,7 @@ class Parser:
         return True
 
     def run_com_loop(self):
+        # fileCreated = False
         while self.connected and not self.stop.is_set():
             try:
                 packet = read_packet(self.serial)
@@ -421,6 +428,14 @@ class Parser:
                 continue
             
             pid, data0, data1, seq = packet
+            if self.logFile:
+                try:
+                    print("Logging packet to file:", pid, data0, data1, seq)
+                    self.logFile.write(f"{pid},{data0:02X},{data1:02X},{seq}\n")
+                    self.logFile.flush()
+                except Exception as e:
+                    print(f"Error writing to log file: {e}")
+
             self.process_packet(pid, data0, data1, seq)
         return "stopped"
 
@@ -445,7 +460,6 @@ class Parser:
                 self.state = ConnectionState.DISCONNECTED
                 time.sleep(1)
                 continue
-
             self.state = ConnectionState.CONNECTED
             self.run_com_loop()
 

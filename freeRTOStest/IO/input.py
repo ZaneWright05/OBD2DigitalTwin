@@ -5,6 +5,19 @@ from time import sleep
 from datetime import datetime
 from serial.tools import list_ports
 # from model.dataParser import Parser
+from pathlib import Path
+
+def create_log_file():
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    i = 1
+    while True:
+        file_path = log_dir / f"log_{i}.csv"
+        if not file_path.exists():
+            return file_path
+        i += 1
+
 
 def find_connected_port():
     ports = list(list_ports.comports())

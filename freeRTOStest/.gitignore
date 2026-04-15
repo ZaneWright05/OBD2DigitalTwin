@@ -11,3 +11,4 @@ note.txt
 historicMetrics.joblib
 gear_model.joblib
 idle_bin.joblib
+logs/*

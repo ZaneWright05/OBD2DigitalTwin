@@ -237,7 +237,8 @@ class TopBar(BoxLayout):
                     #   content=content,
                     #   size_hint=(0.8, 0.4),
                       metrics=comparsionPoints,
-                      auto_dismiss=False)
+                      auto_dismiss=False,
+                      filePath=self.analyser.filePath)
         popup.open()
 
     def update_topBar(self, state):
