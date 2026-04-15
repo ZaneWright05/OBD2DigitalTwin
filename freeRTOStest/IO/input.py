@@ -51,8 +51,16 @@ def read_packet(ser: serial.Serial):
 
     try:
         line = line.decode("utf-8", errors="ignore").strip()
+        if line == "V": # valid vehicle signal
+            print("Vehicle supported")
+            return None
+        if line == "I": # invalid vehicle signal
+            print("Vehicle not supported")
+            return None
+        
         parts = line.split(",")
         if len(parts) != 4:
+            print(f"Invalid packet format: {line}")
             return None
 
         pid = parts[0]
