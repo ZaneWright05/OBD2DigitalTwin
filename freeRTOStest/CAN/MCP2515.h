@@ -404,7 +404,7 @@ function:
 ********************************************************************************/
 
 enum RATEBPS {KBPS5 = 0, KBPS10, KBPS20, KBPS50, KBPS100, KBPS125, KBPS250, KBPS500, KBPS800, KBPS1000 };
-void MCP2515_Init(void);
+void MCP2515_Init(enum RATEBPS baud_rate);
 void MCP2515_Send(uint32_t Canid, uint8_t *Buf, uint8_t len);
 void MCP2515_ReceiveNoTimeout(uint32_t Canid, uint8_t *CAN_RX_Buf);
 void MCP2515_Receive(uint32_t Canid, uint8_t *CAN_RX_Buf, uint8_t debug);

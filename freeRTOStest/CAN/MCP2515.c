@@ -60,7 +60,7 @@
         {0x00, 0x92, 0x02}, 
         {0x00, 0x82, 0x02}};
 
-    void MCP2515_Init(void)
+    void MCP2515_Init(enum RATEBPS baud_rate)
     {
         printf("MCP2515 Init\r\n");
         // LOG_INFO("Reset");
@@ -74,9 +74,9 @@
         // # MCP2515_WriteBytes(CNF1, 7)
         // # MCP2515_WriteBytes(CNF2,0x80|PHSEG1_3TQ|PRSEG_1TQ)
         // # MCP2515_WriteBytes(CNF3,PHSEG2_3TQ)
-        MCP2515_WriteBytes(CNF1, CAN_RATE[KBPS500][0]);
-        MCP2515_WriteBytes(CNF2, CAN_RATE[KBPS500][1]);
-        MCP2515_WriteBytes(CNF3, CAN_RATE[KBPS500][2]);
+        MCP2515_WriteBytes(CNF1, CAN_RATE[baud_rate][0]);
+        MCP2515_WriteBytes(CNF2, CAN_RATE[baud_rate][1]);
+        MCP2515_WriteBytes(CNF3, CAN_RATE[baud_rate][2]);
         // MCP2515_WriteBytes
         // MCP2515_WriteBytes
 
@@ -181,7 +181,7 @@
                 MCP2515_WriteBytes(CANINTF, 0);
                 }
             }
-            if (absolute_time_diff_us(start, get_absolute_time()) > 50000) { // timeout after 50 ms
+            if (absolute_time_diff_us(start, get_absolute_time()) > 60000) { // timeout after 60 ms
                 if(debug > 0){
                     printf("Timeout waiting for CAN message with ID %X\n", Canid);
                 } 

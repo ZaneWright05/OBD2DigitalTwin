@@ -385,17 +385,8 @@
         return true;
     }
 
-    int main()
-    {
-        stdio_init_all();
-        CAN_DEV_Module_Init();
-        MCP2515_Init();
-        bool validVehicle = false;
-        // while(!stdio_usb_connected()){
-        //     tight_loop_contents();
-        // }
-        // check vehicle connection and supp PIDS, else send err msg and wait on connection
-        uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
+    bool check_all_PIDS_supported(){
+                uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
         uint8_t response[8] = {0};
         MCP2515_Send(canID, request, 8);
         MCP2515_Receive(0x7E8, response, 1); // worst case should be 60ms
@@ -414,26 +405,63 @@
                 MCP2515_Receive(0x7E8, response3, 1); // worst case should be 60ms
                 uint8_t respData3[4] = {response3[3], response3[4], response3[5], response3[6]};
                 if(response3[1] == 0x41 && response3[2] == 0x40 && check_pid_support(respData3, pid40Mask)){ // all req PIDS supported
-                    validVehicle = true;
+                    return true;
                 }
             }
         }
+        return false;
+    }
+
+    bool find_valid_baud_rate(){
+        enum RATEBPS isoRates[] = {KBPS250, KBPS500};
+        uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
+        uint8_t response[8] = {0};
+        for(int i = 0; i < sizeof(isoRates)/sizeof(isoRates[0]); i++){
+            MCP2515_Init(isoRates[i]);
+            MCP2515_Send(canID, request, 8);
+            MCP2515_Receive(0x7E8, response, 1); // worst case should be 60ms
+            if(response[1] == 0x41 && response[2] == 0x00){ // valid response received
+                printf("Valid baud rate found: %d kbps\n", (isoRates[i] == KBPS250) ? 250 : 500);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    int main()
+    {
+        stdio_init_all();
+        CAN_DEV_Module_Init();
+        bool baudRateFound = find_valid_baud_rate();
+        bool validVehicle = check_all_PIDS_supported();
+        // while(!stdio_usb_connected()){
+        //     tight_loop_contents();
+        // }
+        // check vehicle connection and supp PIDS, else send err msg and wait on connection
 
         // wait for host start signal
         while(1){
             if(!stdio_usb_connected()){
                 continue;
             }
-            if(validVehicle){
-                printf("%c\n",VALID_VEHICLE_SIGNAL);
-                int input = getchar_timeout_us(100000); // wait for 100ms for input
-                if(input == START_SIGNAL){
-                    tripStarted = true;
-                    break;
+            if(baudRateFound){
+                if(validVehicle){
+                    printf("%c\n",VALID_VEHICLE_SIGNAL);
+                    int input = getchar_timeout_us(100000); // wait for 100ms for input
+                    if(input == START_SIGNAL){
+                        tripStarted = true;
+                        break;
+                    }
+                }
+                else{
+                    printf("%c\n",INVALID_VEHICLE_SIGNAL);
+                    validVehicle = check_all_PIDS_supported();
+                    sleep_ms(500);
                 }
             }
             else{
                 printf("%c\n",INVALID_VEHICLE_SIGNAL);
+                baudRateFound = find_valid_baud_rate();
                 sleep_ms(500);
             }
         }
