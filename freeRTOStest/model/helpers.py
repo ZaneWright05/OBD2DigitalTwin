@@ -69,7 +69,7 @@ PIDS = {
     "0x0F": pid("Intake Air Temp", 1, "C", lambda a,b : a - 40,2000),
     "0x23": pid("Fuel Rail Press", 2, "kPa", lambda a,b : 10*((256*a) + b),2000),
 
-    "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
+    # "0x1F": pid("Engine Runtime", 2, "s", lambda a, b: (256 * a) + b,4000)
     }
 
 FUELCONSPID = "0xFF"

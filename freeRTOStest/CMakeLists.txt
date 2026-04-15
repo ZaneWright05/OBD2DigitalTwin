@@ -67,7 +67,6 @@ pico_enable_stdio_usb(freeRTOStest 1)
 # Add the standard library to the build
 target_link_libraries(freeRTOStest
         pico_stdlib
-
  #      tinyusb_device
        # tinyusb_board
 

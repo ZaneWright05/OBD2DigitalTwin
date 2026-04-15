@@ -32,6 +32,13 @@ def attempt_serial_connection():
     try:
         ser = serial.Serial(port, 115200)
         print(f"Connected to serial port: {port}")
+        if ser.is_open:
+            if(ser.read() == b'V'):
+                print("Vehicle supported, waiting for start signal...")
+            else:
+                print("Unsupported device connected. Waiting for valid device...")
+                ser.close()
+                return None
         return ser
     except Exception as e:
         print(f"Failed to connect to serial port {port}: {e}")
