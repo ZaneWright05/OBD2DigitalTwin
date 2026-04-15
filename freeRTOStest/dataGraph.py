@@ -152,8 +152,8 @@ with open("data_log_4.csv", "r", newline="") as f:
         seq = int(row["Seq"])
 
         
-        if pid == "0x0C": # RPM, can be used to check if engine is on for temp analysis
-            rpm = ((data0 * 256) + int(row["Data1"], 16)) / 4.0
+        if pid == "0x10": # RPM, can be used to check if engine is on for temp analysis
+            rpm = ((data0 * 256) + int(row["Data1"], 16))/100
             sum += rpm
             coolant_temp_by_seq[seq] = rpm  # Store raw coolant temperature data
 

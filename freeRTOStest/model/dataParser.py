@@ -53,7 +53,7 @@ class Parser:
 
         self.rpmMetric = MetricAnalyser(
             PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9,
-            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, False, False]
+            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, False, False], lowRocThreshold= -200, highRocThreshold=200
         )
 
         self.speedMetric = MetricAnalyser(
@@ -73,20 +73,20 @@ class Parser:
 
         self.tempMetric = TempAnalyser(PIDS["0x05"], window_size=30, # temp changes slowly, larger window to capture trends ~15s
                                        historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False],
-                                         highThreshold=105, lowThreshold=75, thresholdTemp=80)
+                                         highThreshold=105, lowThreshold=75, thresholdTemp=80 , useZScore=True)
 
-        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[False, False, False, False])
+        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[True, True, False, False], useZScore=True)
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
             eventsTracked=[False, False, False, False], window_size=10
         )
 
-        self.MAFMetric = MetricAnalyser(PIDS["0x10"], window_size=6, historicMetrics=hist.get("0x10"), eventsTracked=[False, False, False, False])
+        self.MAFMetric = MetricAnalyser(PIDS["0x10"], window_size=10, historicMetrics=hist.get("0x10"), eventsTracked=[True, True, False, False], useZScore=False)
 
-        self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=6, historicMetrics=hist.get("0x42"), eventsTracked=[False, False, False, False])
+        self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=6, historicMetrics=hist.get("0x42"), eventsTracked=[True, True, True, True], useZScore=False, highThreshold=15.0, lowThreshold=11.8, rocMin=0.4, lowRocThreshold=-0.5, highRocThreshold=0.5)
 
-        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=6, historicMetrics=hist.get("0x23"), eventsTracked=[False, False, False, False])
+        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=10, historicMetrics=hist.get("0x23"), eventsTracked=[True, True, False, False], useZScore=False)
 
         self.metrics = {
             "0x0C": self.rpmMetric,
@@ -127,8 +127,6 @@ class Parser:
         joblib.dump(history_payload, "historicMetrics.joblib")
         print("Historic metrics saved.")
 
-    # TODO: use the confidence and add transition logic, 
-    # i.e if currently in gear 3, only transition to gear 2 or 4 and require higher confidence for a jump to gear 1 or 5
     def estimate_gear(self, speed, rpm, throttle):
         if(speed is None or rpm is None):
             return 0
@@ -164,38 +162,31 @@ class Parser:
         value = PIDS[pid].func(data0, data1)
 
         with self.lock:
-            # print(f"Processing PID: {pid}, Value: {value} {PIDS[pid].unit}, Seq: {seq}")
-            # for metric in computedMetrics.values():
-            if pid == "0x0D":
-                # rpm_data, rpm_seq = self.mostRecentValues.get("0x0C", (None, None))
-                rpmSeq = self.rpmMetric.recentSeq
+            if pid == "0x0D": 
                 rpmVal = self.rpmMetric.metrics.current
                 
-                if rpmVal != 0.00 and seq == rpmSeq and self.currentGear[1] != seq:
+                if rpmVal != 0.00:
                     self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
-                
-                prevSpeed = self.speedMetric.metrics.current if self.speedMetric.metrics else None
+                prevSpeed = self.speedMetric.metrics.current
                 self.speedMetric.add_data_point(seq, value)
 
                 if prevSpeed is not None:
                     timeDiff = PIDS[pid].period_ms / 1000.0
-                    averageSpeed = (prevSpeed + value) / 2
-                    self.distanceTravelled_km += (averageSpeed * timeDiff) / 3600.0
+                    averageSpeed = (prevSpeed + value/3.6) / 2 
+                    self.distanceTravelled_km += (averageSpeed * timeDiff) / 1000.0
     
             elif pid == "0x0C":
+                print(f"RPM: {value} at time {seq * PIDS[pid].period_ms / 1000.0:.2f} s")
                 self.rpmMetric.add_data_point(seq, value)
-                speedSeq = self.speedMetric.recentSeq
                 speedVal = self.speedMetric.metrics.current
-                if speedVal != 0.00 and seq == speedSeq and self.currentGear[1] != seq:
-                    self.currentGear = (self.estimate_gear(speedVal, value, self.throttleMetric.metrics.current), seq) # store timestamp
+                if speedVal != 0.00:
+                    self.currentGear = (self.estimate_gear(speedVal * 3.6, value, self.throttleMetric.metrics.current), seq) # store timestamp
     
             elif pid == "0x10": # derive inst fuel cons
                 self.MAFMetric.add_data_point(seq, value)
-                
-                ## with maf we update load estimator and fuel cons metric
-                self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
-                # self.loadEstimator.update(self.rpmMetric.metrics.current, value, self.speedMetric.metrics.wAvgROC)
-
+                self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current * 3.6, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))
+            elif pid == "0x0F":
+                print(f"Intake Air Temp: {value} C at time {seq * PIDS[pid].period_ms / 1000.0:.2f} s, seq is {seq}")
             else:
                 metric = self.metrics.get(pid)
                 if metric is not None:
@@ -203,35 +194,9 @@ class Parser:
 
     def store_gear(self, gear: int):
         with self.lock:
-            speed = self.speedMetric.metrics.current
-            speedSeq = self.speedMetric.recentSeq
+            speed = self.speedMetric.metrics.current * 3.6
             rpm = self.rpmMetric.metrics.current
-            rpmSeq = self.rpmMetric.recentSeq
             throttle = self.throttleMetric.metrics.current
-            throttleSeq = self.throttleMetric.recentSeq
-            if speed is None or rpm is None or speed < 3:
-                return
-            matching = False
-            if speedSeq != rpmSeq:
-                if speedSeq == (rpmSeq - 1): ## rpm is more recent get previous so it matches speed
-                    rpm = self.rpmMetric.data[-2][1] if len(self.rpmMetric.data) >= 2 else None
-                    matching = True
-
-                elif rpmSeq == (speedSeq - 1): ## speed is more recent get previous so it matches rpm
-                    speed = self.speedMetric.data[-2][1] if len(self.speedMetric.data) >= 2 else None
-                    matching = True
-            else:
-                matching = True
-
-            if not matching:
-                print(f"No matching RPM and speed data for gear label, skipping {rpmSeq}, {speedSeq}...")
-                return
-
-            dataTime = (rpmSeq * self.rpmMetric.pid.period_ms) 
-            throttleTime = throttleSeq * self.throttleMetric.pid.period_ms
-            if abs(throttleTime - dataTime) > 1000: # if throttle data is not within 1 second of rpm/speed data, skip
-                print(f"No matching throttle data for gear label, skipping {throttleSeq}...")
-                return
 
             with open("gear_estim.csv", "a") as f:
                 f.write(f"{rpm},{speed},{throttle},{gear}\n")
@@ -251,7 +216,7 @@ class Parser:
             if metric.active_events:
                 events.extend(metric.active_events.values())
             
-        sorted_events = sorted(events, key=lambda event: (event.timestamp, event.priority))
+        sorted_events = sorted(events, key=lambda event: (event.timestamp * event.pid.period_ms, event.priority))
         return sorted_events
 
     def update_events(self, new_events):

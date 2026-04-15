@@ -205,7 +205,7 @@ class VehicleStateScreen(Screen):
 
     def refresh_events(self):
         # Sort events by timestamp
-        sorted_events = sorted(self.eventsStored.values(), key=lambda e: e.timestamp, reverse=True)
+        sorted_events = sorted(self.eventsStored.values(), key=lambda e: e.timestamp * e.pid.period_ms, reverse=True)
 
         for i, widget in enumerate(self.eventWidgets):
             if i < len(sorted_events):

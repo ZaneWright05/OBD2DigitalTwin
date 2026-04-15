@@ -49,7 +49,7 @@ class ThermalState(ShadowState):
     def is_cooling(self, tempROC: float, ROCthresh: float, speed: float, load: float, throttle: float) -> bool:
         return (
             tempROC < -ROCthresh and # temp dropping
-            speed is not None and speed > 40 and # moving for airflow
+            speed is not None and speed * 3.6 > 40 and # moving for airflow
             load is not None and load < 40 and # low engine load
             throttle is not None and throttle < 40 # low driver demand
         )

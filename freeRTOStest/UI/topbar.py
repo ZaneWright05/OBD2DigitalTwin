@@ -197,21 +197,37 @@ class TopBar(BoxLayout):
                 rocAvg=None,
                 histRocAvg=None
             )
-            )
+        )
         for metric in self.analyser.metrics.values():
-            comparsionPoints.append(ComparisonPoint(
-                pidName=metric.pid.name,
-                pidUnit=metric.pid.unit,
-                average=metric.metrics.average,
-                histAvg=metric.historicMetrics.average if metric.historicMetrics is not None else 0,
-                min=metric.metrics.min,
-                histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
-                max=metric.metrics.max,
-                histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
-                hasRoc=True if metric.pid.name != "Speed" else False, # ROC is acc which has own comp point
-                rocAvg=metric.metrics.wAvgROC,
-                histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
-            )
+            if metric.pid.name == "Speed":
+                comparsionPoints.append(ComparisonPoint(
+                    pidName=metric.pid.name,
+                    pidUnit=metric.pid.unit,
+                    average=metric.metrics.average * 3.6, # convert to km/h
+                    histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average * 3.6, 
+                    min=metric.metrics.min * 3.6, 
+                    histMin=metric.historicMetrics.min * 3.6 if metric.historicMetrics is not None else 0,
+                    max=metric.metrics.max * 3.6, 
+                    histMax=metric.historicMetrics.max * 3.6 if metric.historicMetrics is not None else 0,
+                    hasRoc=False, # ROC is acc which has own comp point
+                    rocAvg=0,
+                    histRocAvg=0
+                    )
+                )
+            else:
+                comparsionPoints.append(ComparisonPoint(
+                    pidName=metric.pid.name,
+                    pidUnit=metric.pid.unit,
+                    average=metric.metrics.average,
+                    histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average,
+                    min=metric.metrics.min,
+                    histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
+                    max=metric.metrics.max,
+                    histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
+                    hasRoc=True, # ROC is acc which has own comp point
+                    rocAvg=metric.metrics.wAvgROC,
+                    histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
+                )
             )
 
         print("Showing popup")

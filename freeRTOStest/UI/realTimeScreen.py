@@ -275,7 +275,7 @@ class RealTimeScreen(Screen):
                 
             speed = state["speed"].metrics if state["speed"].metrics else None
             if speed is not None and speed.current is not None:
-                self.speedLabel.text = f"{int(speed.current)} km/h"
+                self.speedLabel.text = f"{int(speed.current * 3.6)} km/h"
             else:
                 self.speedLabel.text = "0 km/h"
 
@@ -320,7 +320,7 @@ class MyApp(App):
         self.topbar = TopBar(analyser=self.analyser, vehicleState=self.vehicleState)
 
         self.analyser.start_parsing(mode="serial")
-        # self.analyser.start_parsing(mode="csv", csv_path="", sample_rate=64)
+        # self.analyser.start_parsing(mode="csv", csv_path="", sample_rate=16)
 
         self.screenManager = ScreenManager()
         self.screenManager.transition = NoTransition()
