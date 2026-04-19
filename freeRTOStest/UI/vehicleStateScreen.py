@@ -197,9 +197,7 @@ class VehicleStateScreen(Screen):
         screen = self.screenManager.get_screen(screen_name)
         if screen:
             state = self.analyser.get_most_recent()
-            if state is None:
-                return
-            else:
+            if state is not None:
                 self.topbar.update_topBar(state)
             self.screenManager.current = screen_name
 
