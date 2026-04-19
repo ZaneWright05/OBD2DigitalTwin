@@ -57,7 +57,7 @@ class MetricAnalyser:
         self.window_size = window_size
         self.sliding_window = deque(maxlen=window_size)
         self.window_sum = 0.0 # running sum for average calculation
-        self.window_sq_sum = 0.0 # running sum of squares for std dev calculation
+        self.sq_sum = 0.0 # running sum of squares for std dev calculation
 
         self.allowZero = allowZero # flag for metrics where 0 isnt no data e.g temp or a %, but RPM is 0 meaning no data
         self.global_sum = 0.0
@@ -84,7 +84,7 @@ class MetricAnalyser:
         # self.data.clear()
         self.sliding_window.clear()
         self.window_sum = 0.0
-        self.window_sq_sum = 0.0
+        self.sq_sum = 0.0
 
         self.global_sum = 0.0
         self.global_count = 0
@@ -184,27 +184,25 @@ class MetricAnalyser:
 
         self.recentSeq = seq
 
-        # before upating window, calculate z score for event detection
-        n = len(self.sliding_window)
-        if n == self.window_size: # only calculate z score if we have a full window of data
-            variance = (self.window_sq_sum / n) - (self.metrics.window_Avg * self.metrics.window_Avg)
-            variance = max(variance, 0.0)
-            std = np.sqrt(variance)
+        if self.global_count > 100:
+            global_mean = self.global_sum / self.global_count
+            global_variance = (self.sq_sum / self.global_count) - (global_mean * global_mean)
+            global_variance = max(global_variance, 0.0)
+            global_std = np.sqrt(global_variance)
         else:
-            std = 0.0
+            global_std = 0.0
 
-        if std > 0:
-            z = (value - self.metrics.window_Avg) / std
+        if global_std > 0:
+            z = (value - global_mean) / global_std
         else:
             z = 0.0
 
         if(len(self.sliding_window) == self.window_size):
             _, oldest = self.sliding_window.popleft() # remove oldest value from window
             self.window_sum -= oldest
-            self.window_sq_sum -= oldest * oldest
         
         self.window_sum += value
-        self.window_sq_sum += value * value
+        self.sq_sum += value * value
 
         self.global_sum += value
         self.global_count += 1
@@ -337,11 +335,11 @@ class MetricAnalyser:
         threshHit = self.highThreshold is not None and val >= self.highThreshold
 
         pri = None
-        if threshHit or (self.useZScore and z >= 3.5):
+        if threshHit or (self.useZScore and z >= 3.0):
             pri = 2
-        elif self.useZScore and z >= 3.0:
+        elif self.useZScore and z >= 2.5:
             pri = 1
-        elif self.useZScore and z >= 2.0: 
+        elif self.useZScore and z >= 1.5: 
             pri = 0
         else:
             self.end_event("above_threshold", seq)
@@ -353,11 +351,11 @@ class MetricAnalyser:
         threshHit = self.lowThreshold is not None and val <= self.lowThreshold
 
         pri = None
-        if threshHit or (self.useZScore and z <= -3.5): 
+        if threshHit or (self.useZScore and z <= -3.0): 
             pri = 2
-        elif self.useZScore and z <= -3.0:
+        elif self.useZScore and z <= -2.5:
             pri = 1
-        elif self.useZScore and z <= -2.0:
+        elif self.useZScore and z <= -1.5:
             pri = 0
         else:
             self.end_event("below_threshold", seq)

@@ -77,18 +77,18 @@ class Parser:
                                        historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False],
                                          highThreshold=105, lowThreshold=75, thresholdTemp=80 , useZScore=True)
 
-        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[True, True, False, False], useZScore=True)
+        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[True, False, False, False], useZScore=True)
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
             eventsTracked=[False, False, False, False], window_size=10
         )
 
-        self.MAFMetric = MetricAnalyser(PIDS["0x10"], window_size=10, historicMetrics=hist.get("0x10"), eventsTracked=[True, True, False, False], useZScore=False)
+        self.MAFMetric = MetricAnalyser(PIDS["0x10"], historicMetrics=hist.get("0x10"), eventsTracked=[False, False, False, False])
 
-        self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=6, historicMetrics=hist.get("0x42"), eventsTracked=[True, True, True, True], useZScore=False, highThreshold=15.0, lowThreshold=11.8, rocMin=0.4, lowRocThreshold=-0.5, highRocThreshold=0.5)
+        self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=20, historicMetrics=hist.get("0x42"), eventsTracked=[True, True, True, True], useZScore=False, highThreshold=15.0, lowThreshold=11.8, rocMin=0.4, lowRocThreshold=-1.5, highRocThreshold=1.5)
 
-        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=10, historicMetrics=hist.get("0x23"), eventsTracked=[True, True, False, False], useZScore=False)
+        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=20, historicMetrics=hist.get("0x23"), eventsTracked=[True, True, False, False], useZScore=True)
 
         self.metrics = {
             "0x0C": self.rpmMetric,
@@ -165,7 +165,8 @@ class Parser:
         with self.lock:
             if pid == "0x0D": 
                 rpmVal = self.rpmMetric.metrics.current
-                
+                if value != 0.00:
+                    print(f"Trip average ROC {self.speedMetric.single_trip_roc_average():.2f}")
                 if rpmVal != 0.00:
                     self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
                 prevSpeed = self.speedMetric.metrics.current
@@ -223,7 +224,7 @@ class Parser:
             key = (event.pid, event.timestamp)
             if key not in self.eventsStored:
                 if len(self.eventsStored) >= self.maxEvents:
-                    oldest_key = min(self.eventsStored, key=lambda k: self.eventsStored[k].timestamp)
+                    oldest_key = min(self.eventsStored, key=lambda k: self.eventsStored[k].timestamp * self.eventsStored[k].pid.period_ms)
                     del self.eventsStored[oldest_key]
                 self.eventsStored[key] = event
 

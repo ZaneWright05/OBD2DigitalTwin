@@ -162,12 +162,62 @@ class TopBar(BoxLayout):
         
         if self.analyser.connected:
             if self.analyser.running:
+                # build comparison points for popup before stopping trip and clearing data
+                comparsionPoints = []
+                metrics = self.analyser.metrics.values()   
+                if metrics is not None:
+                    for metric in metrics:
+                        if metric.pid.name == "Speed":
+                            comparsionPoints.append(ComparisonPoint(
+                                pidName=metric.pid.name,
+                                pidUnit=metric.pid.unit,
+                                average=metric.metrics.average * 3.6, # convert to km/h
+                            histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average * 3.6, 
+                            min=metric.metrics.min * 3.6, 
+                            histMin=metric.historicMetrics.min * 3.6 if metric.historicMetrics is not None else 0,
+                            max=metric.metrics.max * 3.6, 
+                            histMax=metric.historicMetrics.max * 3.6 if metric.historicMetrics is not None else 0,
+                            hasRoc=False,
+                            rocAvg=0,
+                            histRocAvg=0
+                            )
+                        )
+                    else:
+                        comparsionPoints.append(ComparisonPoint(
+                            pidName=metric.pid.name,
+                            pidUnit=metric.pid.unit,
+                            average=metric.metrics.average,
+                            histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average,
+                            min=metric.metrics.min,
+                            histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
+                            max=metric.metrics.max,
+                            histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
+                            hasRoc=True,
+                            rocAvg=metric.single_trip_roc_average(),
+                            histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
+                            )
+                        )
+                        speedMetric = self.analyser.speedMetric
+                if speedMetric is not None:
+                    comparsionPoints.append(ComparisonPoint(
+                        pidName="Accel",
+                            pidUnit="m/s²",
+                            average=speedMetric.single_trip_roc_average(),
+                            histAvg=speedMetric.historicMetrics.wAvgROC if speedMetric.historicMetrics is not None else 0,
+                            min=speedMetric.metrics.minWAvgROC,
+                            histMin=speedMetric.historicMetrics.minWAvgROC if speedMetric.historicMetrics is not None else 0,
+                            max=speedMetric.metrics.maxWAvgROC,
+                            histMax=speedMetric.historicMetrics.maxWAvgROC if speedMetric.historicMetrics is not None else 0,
+                            hasRoc=False,
+                            rocAvg=None,
+                            histRocAvg=None
+                            )
+                        )
+
                 if(self.analyser.stop_trip()):    
                     self.tripButton.text = "Start Trip"
                     self.eventWidget.set_event_text("Trip stopped, data saved") # TODO: list as event so it dissapears
-                    speed = self.analyser.speedMetric.metrics.average
-                    historic_speed = 0
-                    self.show_comparison_popup(speed, historic_speed)
+                    self.show_comparison_popup(comparisonPoints=comparsionPoints)
             else:   
                 if(self.analyser.start_trip()):
                     self.vehicleState.reset_state()
@@ -180,63 +230,14 @@ class TopBar(BoxLayout):
         elif not self.analyser.running and self.tripButton.text != "Start Trip":
             self.tripButton.text = "Start Trip"
 
-    def show_comparison_popup(self, current_value, historic_value):
-        
-        comparsionPoints = []
-        speedMetric = self.analyser.speedMetric
-        comparsionPoints.append(ComparisonPoint(
-            pidName="Accel",
-                pidUnit="m/s²",
-                average=speedMetric.single_trip_roc_average(),
-                histAvg=speedMetric.historicMetrics.wAvgROC if speedMetric.historicMetrics is not None else 0,
-                min=speedMetric.metrics.minWAvgROC,
-                histMin=speedMetric.historicMetrics.minWAvgROC if speedMetric.historicMetrics is not None else 0,
-                max=speedMetric.metrics.maxWAvgROC,
-                histMax=speedMetric.historicMetrics.maxWAvgROC if speedMetric.historicMetrics is not None else 0,
-                hasRoc=False,
-                rocAvg=None,
-                histRocAvg=None
-            )
-        )
-        for metric in self.analyser.metrics.values():
-            if metric.pid.name == "Speed":
-                comparsionPoints.append(ComparisonPoint(
-                    pidName=metric.pid.name,
-                    pidUnit=metric.pid.unit,
-                    average=metric.metrics.average * 3.6, # convert to km/h
-                    histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average * 3.6, 
-                    min=metric.metrics.min * 3.6, 
-                    histMin=metric.historicMetrics.min * 3.6 if metric.historicMetrics is not None else 0,
-                    max=metric.metrics.max * 3.6, 
-                    histMax=metric.historicMetrics.max * 3.6 if metric.historicMetrics is not None else 0,
-                    hasRoc=False, # ROC is acc which has own comp point
-                    rocAvg=0,
-                    histRocAvg=0
-                    )
-                )
-            else:
-                comparsionPoints.append(ComparisonPoint(
-                    pidName=metric.pid.name,
-                    pidUnit=metric.pid.unit,
-                    average=metric.metrics.average,
-                    histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average,
-                    min=metric.metrics.min,
-                    histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
-                    max=metric.metrics.max,
-                    histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
-                    hasRoc=True, # ROC is acc which has own comp point
-                    rocAvg=metric.metrics.wAvgROC,
-                    histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
-                )
-            )
-
+    def show_comparison_popup(self, comparisonPoints: list[ComparisonPoint]):
         print("Showing popup")
         # Create and open the popup
         popup = ComparisonPopup(
             # title="Comparison Result",
                     #   content=content,
                     #   size_hint=(0.8, 0.4),
-                      metrics=comparsionPoints,
+                      metrics=comparisonPoints,
                       auto_dismiss=False,
                       filePath=self.analyser.filePath)
         popup.open()

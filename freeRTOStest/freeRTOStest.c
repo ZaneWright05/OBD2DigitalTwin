@@ -181,7 +181,7 @@
     void CAN_transmission(uint8_t* request_frame, uint8_t* response_frame){
         vTaskSuspendAll(); // enter the critical region
         MCP2515_Send(canID, request_frame, 8);
-        MCP2515_Receive(0x7E8, response_frame, 1); // worst case should be 60ms
+        MCP2515_Receive(0x7E8, response_frame, 1); // worst case should be 50ms
         xTaskResumeAll(); // exit the critical region
     }
 
@@ -386,23 +386,23 @@
     }
 
     bool check_all_PIDS_supported(){
-                uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
+        uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
         uint8_t response[8] = {0};
         MCP2515_Send(canID, request, 8);
-        MCP2515_Receive(0x7E8, response, 1); // worst case should be 60ms
+        MCP2515_Receive(0x7E8, response, 1);
         uint8_t respData[4] = {response[3], response[4], response[5], response[6]}; 
         if(response[1] == 0x41 && response[2] == 0x00 && check_pid_support(respData, pid00Mask)){
             uint8_t request2[8] = {0x02, 0x01, 0x20, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 20-40
             uint8_t response2[8] = {0};
             MCP2515_Send(canID, request2, 8);
-            MCP2515_Receive(0x7E8, response2, 1); // worst case should be 60ms
+            MCP2515_Receive(0x7E8, response2, 1);
             uint8_t respData2[4] = {response2[3], response2[4], response2[5], response2[6]};
 
             if(response2[1] == 0x41 && response2[2] == 0x20 && check_pid_support(respData2, pid20Mask)){
                 uint8_t request3[8] = {0x02, 0x01, 0x40, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 40-60
                 uint8_t response3[8] = {0};
                 MCP2515_Send(canID, request3, 8);
-                MCP2515_Receive(0x7E8, response3, 1); // worst case should be 60ms
+                MCP2515_Receive(0x7E8, response3, 1);
                 uint8_t respData3[4] = {response3[3], response3[4], response3[5], response3[6]};
                 if(response3[1] == 0x41 && response3[2] == 0x40 && check_pid_support(respData3, pid40Mask)){ // all req PIDS supported
                     return true;
