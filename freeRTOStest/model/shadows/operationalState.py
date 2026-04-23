@@ -81,16 +81,16 @@ class OperationalState(ShadowState):
         count = val["count"]
 
         if ave is None or count < 3: # not enough data to be confident
-            if rpm > 500 and rpm < 1200: # typical idle, low confidence
+            if rpm > 500 and rpm < 1300: # typical idle, low confidence
                 return 0.6
             return 0.1
 
         diff = abs(rpm - ave)
-        if diff <= 80:
+        if diff <= 100:
             return 0.95
-        elif diff <= 150:
+        elif diff <= 200:
             return 0.75
-        elif diff <= 300:
+        elif diff <= 400: # not good enough to store but could be idle
             return 0.4
         return 0.1  
 

@@ -55,7 +55,7 @@ class Parser:
 
         self.rpmMetric = MetricAnalyser(
             PIDS["0x0C"], highThreshold=3000, lowThreshold=500, window_size=9,
-            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, False, False], lowRocThreshold= -200, highRocThreshold=200
+            historicMetrics=hist.get("0x0C"), eventsTracked=[True, True, False, False]
         )
 
         self.speedMetric = MetricAnalyser(
@@ -77,7 +77,7 @@ class Parser:
                                        historicMetrics=hist.get("0x05"), eventsTracked=[False, False, False, False],
                                          highThreshold=105, lowThreshold=75, thresholdTemp=80 , useZScore=True)
 
-        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[True, False, False, False], useZScore=True)
+        self.airIntakeTempMetric = MetricAnalyser(PIDS["0x0F"], historicMetrics=hist.get("0x0F"), eventsTracked=[False, False, True, True], useZScore=True)
 
         self.fuelConsMetric = MetricAnalyser(
             COMPUTEDPIDS[FUELCONSPID], historicMetrics=hist.get(FUELCONSPID),
@@ -88,7 +88,7 @@ class Parser:
 
         self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=20, historicMetrics=hist.get("0x42"), eventsTracked=[True, True, True, True], useZScore=False, highThreshold=15.0, lowThreshold=11.8, rocMin=0.4, lowRocThreshold=-1.5, highRocThreshold=1.5)
 
-        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=20, historicMetrics=hist.get("0x23"), eventsTracked=[True, True, False, False], useZScore=True)
+        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=20, historicMetrics=hist.get("0x23"), eventsTracked=[True, False, False, False], useZScore=True)
 
         self.metrics = {
             "0x0C": self.rpmMetric,
@@ -122,6 +122,8 @@ class Parser:
         if (time.monotonic() - self.tripStartTime < 300):
             print("Trip too short (< 5 minutes), not saving historic metrics...")
             return
+        for pid, metric in self.metrics.items():
+            print(f"Saving historic metrics for {PIDS[pid].name}: {metric.historicMetrics}")
         history_payload = {
             pid: metric.update_HistoricMetrics()
             for pid, metric in self.metrics.items()
@@ -193,6 +195,8 @@ class Parser:
                     metric.add_data_point(seq, value)
 
     def store_gear(self, gear: int):
+        if self.serial is None or self.tripStartTime is None or self.state != ConnectionState.ACTIVE_TRIP:
+            return
         with self.lock:
             speed = self.speedMetric.metrics.current * 3.6
             rpm = self.rpmMetric.metrics.current

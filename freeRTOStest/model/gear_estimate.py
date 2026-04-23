@@ -1,12 +1,11 @@
 # semi - supervised estimator, use speed & rpm with clustering to estimate
 # with enough user input KNN can be used
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 import json
 import joblib
 import numpy as np
-from sklearn.cluster import MiniBatchKMeans
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
@@ -14,7 +13,7 @@ from sklearn.preprocessing import StandardScaler
 class GearConfig:
     n_gears: int = 6 # number of gears excl rev
     min_speed: float = 5.0 # above this we consider the data
-    k_neighbors: int = 3 # need tuning based on user input
+    k_neighbors: int = 5 # need tuning based on user input
     k_min_total: int = 24
     k_min_per_gear: int = 2
 

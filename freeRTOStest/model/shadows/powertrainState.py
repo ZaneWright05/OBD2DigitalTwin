@@ -27,7 +27,7 @@ class PowerTrainState(ShadowState):
         if (gear is None or gear == 0) and rpm > minRpm: # check engine is on
             score = 0.5
             # print(f"{rpm} vs {minRpm}")
-            if rpm < minRpm * 1.15: # low rpm in neutral
+            if rpm < minRpm * 1.40: # low rpm in neutral
                 score += 0.3
             if gear == 0: 
                 score += 0.1

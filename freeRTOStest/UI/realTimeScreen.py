@@ -236,7 +236,7 @@ class RealTimeScreen(Screen):
         self.topbar.eventLabel.text = msg
 
     def swap_screen(self, screen_name):
-        print(f"Swapping to screen: {screen_name}")
+        # print(f"Swapping to screen: {screen_name}")
         screen = self.screenManager.get_screen(screen_name)
         if screen:
             state = self.analyser.get_most_recent()

@@ -8,31 +8,16 @@ from model.shadows.shadowState import ShadowState
 class ThermalState(ShadowState):
     def __init__(self):
         self.state = "Unknown"
-        self.confidence = 0.0
-
-        self.stateStartTime = time.time()
-        self.minStateTime_s = 1.0
-
-        self.minSwitchConf = 0.55
-        self.unknownCount = 0
-        self.unknownLimit = 3
 
         self.warmedUp = False
         self.startTemp = None
 
     def reset_trip(self):
         self.state = "Unknown"
-        self.confidence = 0.0
-        self.stateStartTime = time.time()
-        self.unknownCount = 0
-
         self.startTemp = None
         self.warmedUp = False
     
-
-    # TODO: work on the heatsoak issues
     def determine_start(self, coolantTemp, airIntakeTemp = None) -> str:
-        # clear cold and warm => thresholds from "x"
         self.startTemp = coolantTemp
         if coolantTemp < 35: 
             return "Cold Start"
@@ -58,7 +43,7 @@ class ThermalState(ShadowState):
                        overheatThreshold: float, tempLowThreshold: float, intakeTemp: float, 
                        tempROC: float, tempROCThresh: float, speed: float, load: float, throttle: float) -> str:
 
-        coolantThreshold = coolantThreshold or 85.0
+        coolantThreshold = coolantThreshold or 80.0
         overheatThreshold = overheatThreshold or 110.0
         tempLowThreshold = tempLowThreshold or 75.0
 
@@ -77,9 +62,6 @@ class ThermalState(ShadowState):
         
         if coolantTemp >= overheatThreshold:
             return "Overheating"
-
-        if coolantTemp >= (overheatThreshold - 5):
-            return "Overheat Risk"
 
         if coolantTemp >= (overheatThreshold - 5):
             return "Overheat Risk"
