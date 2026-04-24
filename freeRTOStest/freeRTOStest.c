@@ -291,11 +291,13 @@
                 continue;
             }
             gpio_put(task_PIN, 1);
+            absolute_time_t start = get_absolute_time();
             uint8_t rpmSpeedReply[8] = {0};
             CAN_transmission(rpmSpeedFrame, rpmSpeedReply);
             decode_Reply_Frame(rpmSpeedReply, seqNum);
             seqNum++;
             gpio_put(task_PIN, 0);
+            // printf("RPM & Speed Task Duration: %d ms\n", absolute_time_diff_us(start, get_absolute_time()) / 1000);
             vTaskDelayUntil(&nextRelease, period_ticks); // wait until next release
         }
     }

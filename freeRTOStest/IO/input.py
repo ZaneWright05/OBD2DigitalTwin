@@ -46,10 +46,12 @@ def attempt_serial_connection():
         ser = serial.Serial(port, 115200)
         print(f"Connected to serial port: {port}")
         if ser.is_open:
+            
             if(ser.read() == b'V'):
                 print("Vehicle supported, waiting for start signal...")
             else:
                 print("Unsupported device connected. Waiting for valid device...")
+                print("Received:", ser.read())
                 ser.close()
                 return None
         return ser
@@ -85,10 +87,10 @@ def read_packet(ser: serial.Serial):
         return None
 
 
-def read_csv(path, store, sample_rate=16):
+def read_csv(path, store, sample_rate=4):
     delay = 1.0 / sample_rate
     # store.connected = True
-    with open(path or "data_log_4.csv", "r") as csvfile:
+    with open(path or "testCSVs/constSpeedTest.csv", "r") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             if store.stop.is_set() or not store.running:

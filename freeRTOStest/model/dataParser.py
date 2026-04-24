@@ -123,7 +123,10 @@ class Parser:
             print("Trip too short (< 5 minutes), not saving historic metrics...")
             return
         for pid, metric in self.metrics.items():
-            print(f"Saving historic metrics for {PIDS[pid].name}: {metric.historicMetrics}")
+            if pid in PIDS:
+                print(f"Saving historic metrics for {PIDS[pid].name}: {metric.historicMetrics}")
+            else: 
+                print(f"Name for {pid} not found: {metric.historicMetrics}")
         history_payload = {
             pid: metric.update_HistoricMetrics()
             for pid, metric in self.metrics.items()
@@ -145,7 +148,6 @@ class Parser:
             return self.currentGear[0]
         
         currentGear = self.currentGear[0] if self.currentGear[0] is not None else 0
-
         if conf < 0.25:
             return currentGear
         
@@ -167,10 +169,11 @@ class Parser:
         with self.lock:
             if pid == "0x0D": 
                 rpmVal = self.rpmMetric.metrics.current
-                if value != 0.00:
-                    print(f"Trip average ROC {self.speedMetric.single_trip_roc_average():.2f}")
+                # if value != 0.00:
+                #     print(f"Trip average ROC {self.speedMetric.single_trip_roc_average():.2f}")
                 if rpmVal != 0.00:
                     self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
+                    print(f"Estimated gear: {self.currentGear[0]}")
                 prevSpeed = self.speedMetric.metrics.current
                 self.speedMetric.add_data_point(seq, value)
 
@@ -184,7 +187,7 @@ class Parser:
                 speedVal = self.speedMetric.metrics.current
                 if speedVal != 0.00:
                     self.currentGear = (self.estimate_gear(speedVal * 3.6, value, self.throttleMetric.metrics.current), seq) # store timestamp
-    
+                    print(f"Estimated gear: {self.currentGear[0]}")
             elif pid == "0x10": # derive inst fuel cons
                 self.MAFMetric.add_data_point(seq, value)
                 self.fuelConsMetric.add_data_point(seq, calcInstFuelCons(self.speedMetric.metrics.current * 3.6, self.speedMetric.recentSeq, value, seq, self.loadMetric.metrics.current, self.loadMetric.recentSeq))

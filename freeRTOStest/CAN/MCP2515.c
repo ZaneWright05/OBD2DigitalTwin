@@ -181,7 +181,7 @@
                 MCP2515_WriteBytes(CANINTF, 0);
                 }
             }
-            if (absolute_time_diff_us(start, get_absolute_time()) > 60000) { // timeout after 60 ms
+            if (absolute_time_diff_us(start, get_absolute_time()) > 200000) {
                 if(debug > 0){
                     printf("Timeout waiting for CAN message with ID %X\n", Canid);
                 } 

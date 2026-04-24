@@ -92,6 +92,9 @@ class OperationalState(ShadowState):
             return 0.75
         elif diff <= 400: # not good enough to store but could be idle
             return 0.4
+
+        if rpm < 1100: # last ditch low confidence idle
+            return 0.3
         return 0.1  
 
     def gen_cruise_score(self, acc: float, rpmROC: float, throttle: float, historicThrottleMin: float, speed: float) -> float:
@@ -199,7 +202,7 @@ class OperationalState(ShadowState):
         maxState = max(scores, key=scores.get)
         maxScore = scores[maxState]
 
-        if maxScore < 0.35:
+        if maxScore < 0.30:
             return "Unknown", maxScore
         
         return maxState, maxScore
