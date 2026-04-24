@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <time.h>
 #include <stdio.h>
 #include "lib/CAN/CAN_DEV_Config.h"
 #include "lib/CAN/MCP2515.h"
@@ -260,10 +261,20 @@ uint8_t data[][15] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},
 };
 
+void addRandDelay(){
+    static int seeded = 0;
+    if(!seeded){
+        srand(time(NULL));
+        seeded = 1;
+    }
+    int delay = rand() % 26 + 25;
+
+    sleep_ms(50);
+}
 
 int getMessageOnBroadcast(uint8_t *reply){
     // MCP2515_Receive(0x7DF, reply);
-    MCP2515_Receive(0x7DF, reply);
+    MCP2515_ReceiveNoTimeout(0x7DF, reply);
     if(reply[0] == 0 && reply[1] == 0){
         return -1;
     }
@@ -300,13 +311,14 @@ int send_CAN(uint8_t *frame){
 
 // take a PID and row number, return [PID, dataA, dataB, ...] 
 uint8_t* PID_To_Rawbits(uint8_t pid, int rowNum){
-    uint8_t* result = calloc(3, sizeof(uint8_t));
+    uint8_t* result = calloc(4, sizeof(uint8_t)); 
     result[0] = pid;
     switch (pid)
     {
         case 0x0C: // engine RPM
             result[1] = data[rowNum][0];
             result[2] = data[rowNum][1];
+            result[3] = 0x01; // indicate two data bytes leave as 0 for single data byte
             break;
         case 0x0D: // vehicle speed
             result[1] = data[rowNum][2];
@@ -320,6 +332,7 @@ uint8_t* PID_To_Rawbits(uint8_t pid, int rowNum){
         case 0x42: // control module voltage
             result[1] = data[rowNum][5];
             result[2] = data[rowNum][6];
+            result[3] = 0x01;
             break;
         case 0x04: // calculated engine load
             result[1] = data[rowNum][7];
@@ -327,14 +340,17 @@ uint8_t* PID_To_Rawbits(uint8_t pid, int rowNum){
         case 0x23: // fuel rail pressure
             result[1] = data[rowNum][8];
             result[2] = data[rowNum][9];
+            result[3] = 0x01;
             break;
         case 0x10: // mass air flow
             result[1] = data[rowNum][10];
             result[2] = data[rowNum][11];
+            result[3] = 0x01;
             break;
         case 0x1F: // run time since engine start
             result[1] = data[rowNum][12];
             result[2] = data[rowNum][13];
+            result[3] = 0x01;
             break;
         case 0x0F: // intake air temperature
             result[1] = data[rowNum][14];
@@ -356,7 +372,30 @@ uint8_t* Decode_Request(uint8_t *request, int rowNum){
     if(dataLen == 0x00){ // no PIDs given 
         return NULL; 
     }
+    if (request[2] == 0x00){
+        response[0]=0x06; response[1]=0x41; response[2]=0x00;
 
+        response[3]=0xFF; response[4]=0xFF; response[5]=0xFF; response[6]=0xFF;
+
+        response[7]=0xAA;
+        return response;
+    }
+    if (request[2] == 0x20){
+        response[0]=0x06; response[1]=0x41; response[2]=0x20;
+
+        response[3]=0xFF; response[4]=0xFF; response[5]=0xFF; response[6]=0xFF;
+
+        response[7]=0xAA;
+        return response;
+    }
+    if (request[2] == 0x40){
+        response[0]=0x06; response[1]=0x41; response[2]=0x40;
+
+        response[3]=0xFF; response[4]=0xFF; response[5]=0xFF; response[6]=0xFF;
+        
+        response[7]=0xAA;
+        return response;
+    }
     uint8_t calculatedLen = 0x01; // 1 for the 0x41 mode 
     response[1] = 0x41; // mode 1 response
     for(uint8_t i = 0; i < dataLen; i++){
@@ -372,7 +411,7 @@ uint8_t* Decode_Request(uint8_t *request, int rowNum){
         //response // store the PID
         response[calculatedLen + 1] = rawbits[0]; // PID
         calculatedLen++;
-        if(rawbits[2] == 0x00){ // single data byte
+        if(rawbits[3] == 0x00){ // single data byte
             response[calculatedLen + 1] = rawbits[1]; // dataA
             calculatedLen++;
         } else { // two data bytes
@@ -413,7 +452,7 @@ uint8_t* Decode_Request(uint8_t *request, int rowNum){
 
 int main(void){
     stdio_init_all();
-    while(!stdio_usb_connected());
+    // while(!stdio_usb_connected());
     printf("CAN OBD-II Reader Initialized\n");
     CAN_DEV_Module_Init();
     MCP2515_Init();
@@ -438,6 +477,11 @@ int main(void){
             printf("%02X ", response[j]);
         }
         printf("\n");
+        // addRandDelay(); 
+        absolute_time_t now = get_absolute_time();
+        sleep_ms(50); // simulate processing time
+        printf("Slept 50ms, sending response...\n");
+        printf("Time slept: %lld us\n", absolute_time_diff_us(now, get_absolute_time()));
         send_CAN(response);
         free(response);
         

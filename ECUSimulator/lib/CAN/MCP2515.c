@@ -73,7 +73,17 @@
         // #<5:0>BRP=0x03 (TQ=[2*(BRP+1)]/Fsoc=2*8/16M=1us)
         // # MCP2515_WriteBytes(CNF1, 7)
         // # MCP2515_WriteBytes(CNF2,0x80|PHSEG1_3TQ|PRSEG_1TQ)
-        // # MCP2515_WriteBytes(CNF3,PHSEG2_3TQ)
+        // // # MCP2515_WriteBytes(CNF3,PHSEG2_3TQ)
+        
+
+        // MCP2515_WriteBytes(CNF1, CAN_RATE[KBPS125][0]);
+        // MCP2515_WriteBytes(CNF2, CAN_RATE[KBPS125][1]);
+        // MCP2515_WriteBytes(CNF3, CAN_RATE[KBPS125][2]);
+
+        // MCP2515_WriteBytes(CNF1, CAN_RATE[KBPS250][0]);
+        // MCP2515_WriteBytes(CNF2, CAN_RATE[KBPS250][1]);
+        // MCP2515_WriteBytes(CNF3, CAN_RATE[KBPS250][2]);
+
         MCP2515_WriteBytes(CNF1, CAN_RATE[KBPS500][0]);
         MCP2515_WriteBytes(CNF2, CAN_RATE[KBPS500][1]);
         MCP2515_WriteBytes(CNF3, CAN_RATE[KBPS500][2]);
