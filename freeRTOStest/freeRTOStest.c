@@ -217,12 +217,17 @@
     }
 
     void MCU_reset(){
+        gpio_init(13);
+        gpio_set_dir(13, GPIO_OUT);
+        gpio_put(13, 1);
         tripStarted = false;
 
         sleep_ms(getMaxPeriod()); // wait for longest task so all tasks finish
 
         clear_Queue(); // clear the queue to avoid old data being printed when trip starts again
 
+
+        gpio_put(13, 0);
         watchdog_reboot(0, 0, 0); // reset the MCU
 
         while(1){
@@ -291,7 +296,7 @@
                 continue;
             }
             gpio_put(task_PIN, 1);
-            absolute_time_t start = get_absolute_time();
+            // absolute_time_t start = get_absolute_time();
             uint8_t rpmSpeedReply[8] = {0};
             CAN_transmission(rpmSpeedFrame, rpmSpeedReply);
             decode_Reply_Frame(rpmSpeedReply, seqNum);

@@ -173,7 +173,7 @@ class Parser:
                 #     print(f"Trip average ROC {self.speedMetric.single_trip_roc_average():.2f}")
                 if rpmVal != 0.00:
                     self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
-                    print(f"Estimated gear: {self.currentGear[0]}")
+                    # print(f"Estimated gear: {self.currentGear[0]}")
                 prevSpeed = self.speedMetric.metrics.current
                 self.speedMetric.add_data_point(seq, value)
 

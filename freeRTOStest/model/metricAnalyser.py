@@ -184,7 +184,7 @@ class MetricAnalyser:
 
         self.recentSeq = seq
 
-        if self.global_count > 100:
+        if self.global_count > 150:
             global_mean = self.global_sum / self.global_count
             global_variance = (self.sq_sum / self.global_count) - (global_mean * global_mean)
             global_variance = max(global_variance, 0.0)
@@ -236,6 +236,10 @@ class MetricAnalyser:
   
         self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
         self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
+
+        if pid.name == "Speed":
+            if self.metrics.current < 10.0:
+                return # dont track low speed events 
 
         if self.eventsTracked[0]: # above
             self.above_event(value, seq, z)

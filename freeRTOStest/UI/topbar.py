@@ -182,22 +182,22 @@ class TopBar(BoxLayout):
                             histRocAvg=0
                             )
                         )
-                    else:
-                        comparsionPoints.append(ComparisonPoint(
-                            pidName=metric.pid.name,
-                            pidUnit=metric.pid.unit,
-                            average=metric.metrics.average,
-                            histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average,
-                            min=metric.metrics.min,
-                            histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
-                            max=metric.metrics.max,
-                            histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
-                            hasRoc=True,
-                            rocAvg=metric.single_trip_roc_average(),
-                            histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
+                        else:
+                            comparsionPoints.append(ComparisonPoint(
+                                pidName=metric.pid.name,
+                                pidUnit=metric.pid.unit,
+                                average=metric.metrics.average,
+                                histAvg=0 if metric.historicMetrics is None else metric.historicMetrics.average,
+                                min=metric.metrics.min,
+                                histMin=metric.historicMetrics.min if metric.historicMetrics is not None else 0,
+                                max=metric.metrics.max,
+                                histMax=metric.historicMetrics.max if metric.historicMetrics is not None else 0,
+                                hasRoc=True,
+                                rocAvg=metric.single_trip_roc_average(),
+                                histRocAvg=metric.historicMetrics.wAvgROC if metric.historicMetrics is not None else 0
+                                )
                             )
-                        )
-                        speedMetric = self.analyser.speedMetric
+                speedMetric = self.analyser.speedMetric
                 if speedMetric is not None:
                     comparsionPoints.append(ComparisonPoint(
                         pidName="Accel",
@@ -213,7 +213,8 @@ class TopBar(BoxLayout):
                             histRocAvg=None
                             )
                         )
-
+                for point in comparsionPoints:
+                    print(f"{point.pidName}")
                 if(self.analyser.stop_trip()):    
                     self.tripButton.text = "Start Trip"
                     self.eventWidget.set_event_text("Trip stopped, data saved") # TODO: list as event so it dissapears
