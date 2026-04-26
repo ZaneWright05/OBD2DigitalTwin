@@ -237,7 +237,7 @@ class MetricAnalyser:
         self.metrics.minWAvgROC = min(self.metrics.minWAvgROC, self.metrics.wAvgROC) if self.metrics.minWAvgROC != float('inf') else self.metrics.wAvgROC
         self.metrics.maxWAvgROC = max(self.metrics.maxWAvgROC, self.metrics.wAvgROC) if self.metrics.maxWAvgROC != float('-inf') else self.metrics.wAvgROC
 
-        if pid.name == "Speed":
+        if self.pid.name == "Speed":
             if self.metrics.current < 10.0:
                 return # dont track low speed events 
 
