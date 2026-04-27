@@ -176,7 +176,7 @@ class OperationalState(ShadowState):
         if histThrottleMin is None:
             histThrottleMin = 20.0 # if no historic data, use 20% * 30 as threshold
 
-        if speed * 3.6 <= 3 and throttle <= histThrottleMin * 1.2 and abs(acc) <= 0.4:
+        if speed * 3.6 <= 3 and throttle <= histThrottleMin * 2 and abs(acc) <= 0.4:
             idleScore = self.gen_idle_score(rpm, temp)
             scores["Idling"] = idleScore
             if idleScore >= 0.6:
@@ -184,10 +184,6 @@ class OperationalState(ShadowState):
                 self.idleCount += 1
                 if self.idleCount % 10 == 0: # save every 10 idle data points
                     self.save_bin("idle_bin.joblib") # save after learning
-        
-        # not wanted ass decel or cruising override -> if unknown is occ a lot can adapt other thresholds
-        # if throttle <= histThrottleMin * 1.2 and acc > -0.4 and acc < -0.05 and speed > 2:
-        #     scores["Coasting"] = 0.7 # coasting, not fully calib
 
         if rpm > 800 and rpm < 3000 and speed * 3.6 > 5 and abs(acc) <= 2: # high and low rpm is not cruising
             scores["Cruising"] = self.gen_cruise_score(acc, rpmROC, throttle, histThrottleMin, speed)

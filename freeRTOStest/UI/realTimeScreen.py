@@ -318,8 +318,8 @@ class MyApp(App):
         self.vehicleState = VehicleState()
         self.topbar = TopBar(analyser=self.analyser, vehicleState=self.vehicleState)
 
-        # self.analyser.start_parsing(mode="serial")
-        self.analyser.start_parsing(mode="csv", csv_path="log_10.csv", sample_rate=16)
+        self.analyser.start_parsing(mode="serial")
+        # self.analyser.start_parsing(mode="csv", csv_path="testCSVs/accAndHighLoad.csv", sample_rate=48)
 
         self.screenManager = ScreenManager()
         self.screenManager.transition = NoTransition()

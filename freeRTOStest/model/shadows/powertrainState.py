@@ -62,24 +62,15 @@ class PowerTrainState(ShadowState):
 
     def gen_engineBraking_score(self, gear, throttle, throttleMin, load, rpmROC) -> float:
         score = 0.0
-        if throttle <= throttleMin * 1.2:
+        if throttle <= throttleMin * 1.35:
             score += 0.5
-        if load <= 0.2:
+        if load <= 20:
             score += 0.1
-        if rpmROC < -0.25: # engine speed slowing
+        if rpmROC < -50: # engine speed slowing
             score += 0.1
         if gear:
             score += 0.1
         return min(score, 0.99)
-
-    def gen_gearShift_score(self, gear, throttle, throttleMin, rpmROC) -> float:
-        score = 0.0
-        if abs(rpmROC) > 250 and throttle <= throttleMin * 1.5: # rpm jump with low throttle
-            score = 0.7
-        if gear:
-            score += 0.1
-        return score
-
 
     def estimate_state(self, gear, load, throttle, minThrottle, rpm, rpmROC, rpmMin) -> tuple[str, float]:
         # histThrottleMin = throttle.allTripMin if throttle.allTripMin is not None else 20.0
@@ -88,14 +79,10 @@ class PowerTrainState(ShadowState):
           "Under Load": self.gen_driving_score(gear, load, throttle, minThrottle), # normal drive
           "High Load": self.gen_highLoad_score(gear, load, rpmROC), # engine working hard (acc/uphill)
           "Engine Braking": self.gen_engineBraking_score(gear, throttle, minThrottle, load, rpmROC), # deceleration in gear with low throttle
-        #   "Gear Shift": self.gen_gearShift_score(gear, throttle, minThrottle, rpmROC), # rpm drop with low throttle, not decelerating
         }
 
         maxState = max(states, key=states.get)
         maxScore = states[maxState]
-
-        # for state in states:
-        #     print(f"{state} score: {states[state]:.2f}")
 
         if maxScore < 0.35:
             return "Unknown", maxScore

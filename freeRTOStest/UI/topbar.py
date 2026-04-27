@@ -8,8 +8,6 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from CompPopup import ComparisonPopup
 from model.helpers import ComparisonPoint
-# from model.dataParser import Parser
-# from model.vehicleState import VehicleState
 
 imgDir = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -233,11 +231,7 @@ class TopBar(BoxLayout):
 
     def show_comparison_popup(self, comparisonPoints: list[ComparisonPoint]):
         print("Showing popup")
-        # Create and open the popup
         popup = ComparisonPopup(
-            # title="Comparison Result",
-                    #   content=content,
-                    #   size_hint=(0.8, 0.4),
                       metrics=comparisonPoints,
                       auto_dismiss=False,
                       filePath=self.analyser.filePath)

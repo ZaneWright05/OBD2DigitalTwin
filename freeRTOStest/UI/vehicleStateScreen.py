@@ -202,7 +202,6 @@ class VehicleStateScreen(Screen):
             self.screenManager.current = screen_name
 
     def refresh_events(self):
-        # Sort events by timestamp
         sorted_events = sorted(self.eventsStored.values(), key=lambda e: e.timestamp * e.pid.period_ms, reverse=True)
 
         for i, widget in enumerate(self.eventWidgets):
@@ -271,8 +270,6 @@ class VehicleStateScreen(Screen):
         self.opLabel.text = operational
 
     def refresh(self, dt):
-        # if self.screenManager.current != 'vehicleState':
-        #     return
         
         state = self.analyser.get_most_recent()
         if state is None:
@@ -280,45 +277,13 @@ class VehicleStateScreen(Screen):
 
         self.topbar.update_topBar(state)
 
-        # if self.analyser.connected != self.topbar.connectionState:
-        #     self.topbar.set_connection(self.analyser.connected)
-
-        # if not self.analyser.running and self.topbar.tripButton.text == "Start Trip":
-        #     self.topbar.tripButton.text = "Start Trip"
 
         if self.analyser.connected and self.analyser.running:
-            # update vehicle state
             shadow =self.vehicleState.update(self.analyser.get_snapshot())
             self.thermal_to_img(shadow.thermal)
             self.powertrain_to_img(shadow.powertrain)
             self.operational_to_img(shadow.operational)
 
-        #    print(shadow.powertrain)
-            # self.driverTitle.text = f"Powertrain: {shadow.powertrain} \nOperational: {shadow.operational} \nThermal: {shadow.thermal}"
-            
-            ## topbar update
-            
-            # if self.topbar.tripButton.text != "Stop Trip":
-            #     self.topbar.tripButton.text = "Stop Trip"
-
-            # state = self.analyser.get_most_recent()
-            # if state is None:
-            #     return
-
             self.eventsStored = state["allEvents"]
             if self.eventsStored is not None:
                 self.refresh_events()
-            #     if not self.topbar.eventLabelHidden:
-            #         self.topbar.eventLabelHidden = True
-            #         self.topbar.eventLabel.opacity = 0
-            #         self.topbar.eventLabel.disabled = True
-            #         self.topbar.set_event_text("")
-            # else:
-            #     self.topbar.eventLabelHidden = False
-            #     self.topbar.eventLabel.opacity = 1
-            #     self.topbar.eventLabel.disabled = False
-            #     # print(f"Event detected in UI: {event}")
-            #     endStr = f"ended duration {event.length * event.pid.period_ms / 1000:.1f} s" if event.ended else "detected"
-            #     startTime_ms = event.timestamp * event.pid.period_ms
-            #     startTime = f"{int(startTime_ms // 60000):02d}:{int((startTime_ms % 60000) // 1000):02d}"
-            #     self.topbar.set_event_text(f"[{startTime}] {event.pid.name} - {event.type} {endStr}")

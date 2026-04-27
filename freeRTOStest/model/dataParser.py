@@ -3,7 +3,7 @@ import threading
 from collections import defaultdict, deque
 import time
 import joblib
-from model.gear_estimate import GearEstimator
+from model.gearEstimate import GearEstimator
 from model.metricAnalyser import MetricAnalyser, Metrics, Event, TempAnalyser
 from model.helpers import ThermalPoint, pid, PIDS, COMPUTEDPIDS, FUELCONSPID, calcInstFuelCons, MetricPoint, TelemetrySnapshot
 from IO.input import attempt_serial_connection, read_csv, read_packet, create_log_file
@@ -173,7 +173,7 @@ class Parser:
                 #     print(f"Trip average ROC {self.speedMetric.single_trip_roc_average():.2f}")
                 if rpmVal != 0.00:
                     self.currentGear = (self.estimate_gear(value, rpmVal, self.throttleMetric.metrics.current), seq)
-                    # print(f"Estimated gear: {self.currentGear[0]}")
+                    print(f"Estimated gear: {self.currentGear[0]}")
                 prevSpeed = self.speedMetric.metrics.current
                 self.speedMetric.add_data_point(seq, value)
 

@@ -31,12 +31,6 @@
     StaticTask_t INTAKE_FUEL_PRESS_task_p;
     StackType_t INTAKE_FUEL_PRESS_stack[256];
 
-    // StaticTask_t RUNTIME_SINCE_ENG_START_task_p;
-    // StackType_t RUNTIME_SINCE_ENG_START_stack[256];
-
-    // static StaticQueue_t xStaticQueue;
-    // QueueHandle_t dataQueue;
-
     uint8_t pid00Mask[4] = {0x18, 0x1B, 0x80, 0x01}; // speed, eng speed, eng load, maf ,coolant temp, throttle pos, int temp and next set
     uint8_t pid20Mask[4] = {0x20, 0x00, 0x00, 0x01}; // fuel press and next set
     uint8_t pid40Mask[4] = {0x40, 0x00, 0x00, 0x00}; // look for volt
@@ -51,8 +45,6 @@
     volatile bool hostConnected = false;
     volatile bool tripStarted = false;
 
-
-    // uint8_t ucQueueStorageArea[ 256 * sizeof(QueueEntry) ];
 
     StaticTask_t xIdleTaskTCB;
     StackType_t  xIdleStack[configMINIMAL_STACK_SIZE];
@@ -420,15 +412,15 @@
     }
 
     bool find_valid_baud_rate(){
-        enum RATEBPS isoRates[] = {KBPS250, KBPS500};
+        enum RATEBPS baudrateRecord[] = {KBPS250, KBPS500};
         uint8_t request[8] = {0x02, 0x01, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}; // 00-20
         uint8_t response[8] = {0};
-        for(int i = 0; i < sizeof(isoRates)/sizeof(isoRates[0]); i++){
-            MCP2515_Init(isoRates[i]);
+        for(int i = 0; i < sizeof(baudrateRecord)/sizeof(baudrateRecord[0]); i++){
+            MCP2515_Init(baudrateRecord[i]);
             MCP2515_Send(canID, request, 8);
-            MCP2515_Receive(0x7E8, response, 1); // worst case should be 60ms
+            MCP2515_Receive(0x7E8, response, 1); // worst case should be 50ms
             if(response[1] == 0x41 && response[2] == 0x00){ // valid response received
-                printf("Valid baud rate found: %d kbps\n", (isoRates[i] == KBPS250) ? 250 : 500);
+                printf("Valid baud rate found: %d kbps\n", (baudrateRecord[i] == KBPS250) ? 250 : 500);
                 return true;
             }
         }
@@ -473,8 +465,6 @@
             }
         }
 
-        // tusb_init();
-        //dataQueue = xQueueCreateStatic(256, sizeof(QueueEntry), ucQueueStorageArea, &xStaticQueue);
         queue_init(&dataQueue, sizeof(QueueEntry),256);
 
         xTaskCreateStatic(rpm_veh_task,
@@ -508,14 +498,6 @@
                     2,
                     INTAKE_FUEL_PRESS_stack,
                 &INTAKE_FUEL_PRESS_task_p);
-
-        // xTaskCreateStatic(rt_since_strt_task,
-        //             "Run Time Since Engine Start Task",
-        //             256,
-        //             NULL,
-        //             1,
-        //             RUNTIME_SINCE_ENG_START_stack,
-        //         &RUNTIME_SINCE_ENG_START_task_p);
         
         multicore_launch_core1(pop_From_Queue); // start the queue pop task on the second core
         
