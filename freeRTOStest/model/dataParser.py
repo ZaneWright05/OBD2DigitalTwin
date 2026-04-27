@@ -88,7 +88,7 @@ class Parser:
 
         self.voltMetric = MetricAnalyser(PIDS["0x42"], window_size=20, historicMetrics=hist.get("0x42"), eventsTracked=[True, True, True, True], useZScore=False, highThreshold=15.0, lowThreshold=11.8, rocMin=0.4, lowRocThreshold=-1.5, highRocThreshold=1.5)
 
-        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=20, historicMetrics=hist.get("0x23"), eventsTracked=[True, False, False, False], useZScore=True)
+        self.fuelRailPresMetric = MetricAnalyser(PIDS["0x23"], window_size=20, historicMetrics=hist.get("0x23"), eventsTracked=[False, False, False, False], useZScore=True)
 
         self.metrics = {
             "0x0C": self.rpmMetric,
